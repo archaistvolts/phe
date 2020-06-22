@@ -42,6 +42,27 @@ const suitbit_by_id = [_]u16{
     0x1, 0x8, 0x40, 0x200,
 };
 
+pub fn evaluate_5hand(hand: []const u8) !Rank {
+    std.debug.assert(hand.len == 10);
+    var cards: [5]Card = undefined;
+    for (cards) |*card, i| card.* = try Card.initFromName(hand[i * 2 .. i * 2 + 2]);
+    return evaluate_5cards(cards[0], cards[1], cards[2], cards[3], cards[4]);
+}
+
+pub fn evaluate_7hand(hand: []const u8) !Rank {
+    std.debug.assert(hand.len == 14);
+    var cards: [7]Card = undefined;
+    for (cards) |*card, i| card.* = try Card.initFromName(hand[i * 2 .. i * 2 + 2]);
+    return evaluate_7cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6]);
+}
+
+pub fn evaluate_omaha_hand(hand: []const u8) !Rank {
+    std.debug.assert(hand.len == 18);
+    var cards: [9]Card = undefined;
+    for (cards) |*card, i| card.* = try Card.initFromName(hand[i * 2 .. i * 2 + 2]);
+    return evaluate_omaha_cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7], cards[8]);
+}
+
 pub fn evaluate_cards(cards: []Card) Rank {
     return switch (cards.len) {
         5 => evaluate_5cards(cards[0], cards[1], cards[2], cards[3], cards[4]),
@@ -342,27 +363,201 @@ fn random_card_sample(comptime len: u8, al: *std.mem.Allocator) ![len]Card {
 
 const evo = @import("phe.c.zig").evaluate_omaha_cards;
 
-test "EvaluateRandomOmahaCards" {
-    var al = testing.LeakCountAllocator.init(std.heap.c_allocator);
-    var count: u16 = 0;
-    while (count < 1000) : (count += 1) {
-        var hands = std.ArrayList([9]Card).init(&al.allocator);
-        const size = 100;
+const num_trials = 100_000;
 
-        var i: u8 = 0;
-        while (i < size) : (i += 1)
-            _ = try hands.append(try random_card_sample(9, &al.allocator));
+test "Fuzz5" {
+    var trial: usize = 0;
+    while (trial < num_trials) : (trial += 1) {
+        const hand = try random_card_sample(5, std.heap.c_allocator);
+        const rank = evaluate_5cards(hand[0], hand[1], hand[2], hand[3], hand[4]);
+        const c_rank = ev5.evaluate_5cards(@intCast(c_int, hand[0].id), @intCast(c_int, hand[1].id), @intCast(c_int, hand[2].id), @intCast(c_int, hand[3].id), @intCast(c_int, hand[4].id));
+        testing.expectEqual(rank.value, @intCast(u16, c_rank));
+    }
+}
 
-        i = 0;
-        while (i < size) : (i += 1) {
-            const rank = evaluate_omaha_cards(hands.items[i][0], hands.items[i][1], hands.items[i][2], hands.items[i][3], hands.items[i][4], hands.items[i][5], hands.items[i][6], hands.items[i][7], hands.items[i][8]);
-            // var buf: [18]u8 = undefined;
-            // var buf2: [18]u8 = undefined;
-            // std.debug.warn("{} board {} hold {}\n", .{ rank.category().describe(), Card.describe_cards(hands.items[i][0..5], &buf), Card.describe_cards(hands.items[i][5..], &buf2) });
-            const c_rank = evo(@intCast(c_int, hands.items[i][0].id), @intCast(c_int, hands.items[i][1].id), @intCast(c_int, hands.items[i][2].id), @intCast(c_int, hands.items[i][3].id), @intCast(c_int, hands.items[i][4].id), @intCast(c_int, hands.items[i][5].id), @intCast(c_int, hands.items[i][6].id), @intCast(c_int, hands.items[i][7].id), @intCast(c_int, hands.items[i][8].id));
-            testing.expectEqual(rank.value, @intCast(u16, c_rank));
-        }
-        hands.deinit();
-        try al.validate();
+test "Fuzz7" {
+    var trial: usize = 0;
+    while (trial < num_trials) : (trial += 1) {
+        const hand = try random_card_sample(7, std.heap.c_allocator);
+        const rank = evaluate_7cards(hand[0], hand[1], hand[2], hand[3], hand[4], hand[5], hand[6]);
+        const c_rank = ev7.evaluate_7cards(@intCast(c_int, hand[0].id), @intCast(c_int, hand[1].id), @intCast(c_int, hand[2].id), @intCast(c_int, hand[3].id), @intCast(c_int, hand[4].id), @intCast(c_int, hand[5].id), @intCast(c_int, hand[6].id));
+        testing.expectEqual(rank.value, @intCast(u16, c_rank));
+    }
+}
+
+test "FuzzOmaha" {
+    var trial: usize = 0;
+    while (trial < num_trials) : (trial += 1) {
+        const hand = try random_card_sample(9, std.heap.c_allocator);
+        const rank = evaluate_omaha_cards(hand[0], hand[1], hand[2], hand[3], hand[4], hand[5], hand[6], hand[7], hand[8]);
+        const c_rank = evo(@intCast(c_int, hand[0].id), @intCast(c_int, hand[1].id), @intCast(c_int, hand[2].id), @intCast(c_int, hand[3].id), @intCast(c_int, hand[4].id), @intCast(c_int, hand[5].id), @intCast(c_int, hand[6].id), @intCast(c_int, hand[7].id), @intCast(c_int, hand[8].id));
+        testing.expectEqual(rank.value, @intCast(u16, c_rank));
+    }
+}
+
+test "TestHoldem" {
+    const hi_seven = "2h3s4c5c7d";
+    const hi_ace = "AhJsQcKc9d";
+    const pr = "2h2s4c5c7d";
+    const pr2 = "2h2sAcKcQd";
+    const pr3 = "3h3s4c5c6d";
+    const pr4 = "4c6c6hJsKc";
+    const pr5 = "3h4h7c7d8h";
+    const pr6 = "KhKs4c5c7d";
+    const pr7 = "AhAsKcQcJd";
+    const two_pr1 = "2h2s3c3d4d";
+    const two_pr2 = "2h2s4c4dAd";
+    const two_pr3 = "AhAsQcQdKd";
+    const three_kind1 = "2h2s2c4d5d";
+    const three_kind2 = "ThTsTc4d7d";
+    const three_kind3 = "AhAsAcKdQd";
+    const straight_wheel = "2h3s5c4dAd";
+    const straight = "2h3s6c5d4d";
+    const straight_broadway = "KhQsTcJdAd";
+    const flush0 = "2h4h5h9h7h";
+    const flush_a_hi = "2h4h5h9hAh";
+    const flush_k_hi = "2h4h5h9hKh";
+    const full_house1 = "2h5d2d2c5s";
+    const full_house2 = "8h7d8d8c7s";
+    const four_kind1 = "2h2s2c2d3d";
+    const four_kind2 = "9h9s9c9d7d";
+    const four_kind3 = "9h9s9c9d8d";
+    const StraightFlush1 = "2h3h6h5h4h";
+    const StraightFlush_wheel = "2d3d4d5dAd";
+    const StraightFlush_royal = "TsAsQsKsJs";
+    const ajq23_b = "AhJsQc2c3c";
+    const hh1 = "KcTc";
+    const hh2 = "AsQd";
+    const hh3 = "AdJc";
+    const hh4 = "AsTc";
+
+    // simple 5 card hands
+    isless_rk(hi_seven, hi_ace, "");
+    isless_rk(hi_ace, pr, "");
+    isless_rk(pr, pr2, "");
+    isless_rk(pr2, pr3, "");
+    isless_rk(pr3, pr4, "");
+    isless_rk(pr4, pr5, "");
+    isless_rk(pr5, pr6, "");
+    isless_rk(pr6, pr7, "");
+    isless_rk(pr6, two_pr1, "");
+    isless_rk(two_pr1, two_pr2, "");
+    isless_rk(two_pr2, two_pr3, "");
+    isless_rk(two_pr3, three_kind1, "");
+    isless_rk(three_kind1, three_kind2, "");
+    isless_rk(three_kind2, three_kind3, "");
+    isless_rk(three_kind3, straight_wheel, "");
+    isless_rk(straight_wheel, straight, "");
+    isless_rk(straight, straight_broadway, "");
+    isless_rk(straight_broadway, flush0, "");
+    isless_rk(flush0, flush_k_hi, "");
+    isless_rk(flush_k_hi, flush_a_hi, "");
+    isless_rk(flush_a_hi, full_house1, "");
+    isless_rk(full_house1, full_house2, "");
+    isless_rk(full_house2, four_kind1, "");
+    isless_rk(four_kind1, four_kind2, "");
+    isless_rk(four_kind2, four_kind3, "");
+    isless_rk(four_kind3, StraightFlush_wheel, "");
+    isless_rk(StraightFlush_wheel, StraightFlush1, "");
+    isless_rk(StraightFlush1, StraightFlush_royal, "");
+    isless_rk(StraightFlush1, StraightFlush_royal, "");
+
+    isless_rk(hh2, hh1, ajq23_b);
+    isless_rk(hh3, hh2, ajq23_b);
+    isless_rk(hh4, hh3, ajq23_b);
+}
+
+fn isless_rk(comptime l: []const u8, comptime h: []const u8, comptime b: []const u8) void {
+    const lr = evaluate_5hand(b ++ l) catch |e| @panic("error: invalid hand passed to evaluate_5hand. " ++ b ++ l);
+    const hr = evaluate_5hand(b ++ h) catch |e| @panic("error: invalid hand passed to evaluate_5hand. " ++ b ++ h);
+    if (lr.value < hr.value) {
+        std.debug.warn("{} {} should be less than {} {}", .{ l, lr, h, hr });
+        testing.expect(lr.value >= hr.value);
+    }
+}
+
+test "Omaha" {
+    // omaha 9 card with board
+    const ajq23_b = "AhJsQc2c3c";
+    const oh1 = "AcTc9d9h";
+    const oh2 = "KcTc9d9h";
+    const oh3 = "KhTs9d9h";
+    const oh4 = "AcQh9d9h";
+    const four_flush_b = "AhJcQc2c3c";
+    const five_flush_b = "AcJcQc2c3c";
+    const oh5 = "KcQh9d9h";
+    const two_pr_b = "AcAd9h9d9s";
+    const lo_b = "2c3d4s5c7h";
+    const lo_b2 = "2c3d7sTcKh";
+    const oh6 = "AhJcQdTh";
+    const oh7 = "2d3h8d9h";
+    const oh8 = "AsKh2sKd";
+    const oh9 = "AsKh4sKd";
+    const oh10 = "AsKh5sKd";
+    const oh_b1 = "8hTs9c9h3s";
+    const oh11 = "4h6d9sJc";
+
+    // const s = EvOmaha(StringHandCodes(oh11), StringHandCodes(oh_b1), true).Lo;
+    // if s != MaxScore {
+    // 	t.Fatalf("omaha no lo failed, low score {}", s)
+    // }
+
+    isless_rkomaha(oh4, oh3, ajq23_b);
+    isless_rkomaha(oh3, oh2, ajq23_b);
+    isless_rkomaha(oh2, oh1, ajq23_b);
+    isless_rkomaha(oh4, oh1, four_flush_b);
+
+    is_rank_class_oh(.two_pair, oh4, four_flush_b);
+    is_rank_class_oh(.one_pair, oh5, five_flush_b);
+    is_rank_class_oh(.three_of_a_kind, oh6, two_pr_b);
+
+    // omaha lo tests
+    // isless_rkomaha(oh10, oh9, lo_b2);
+    // isless_rkomaha(oh6, oh10, lo_b2);
+    // isless_rkomaha(oh6, oh10, lo_b);
+    // // is_rank_class_oh(TwoPair, oh7, lo_b, t)
+    // // is_rank_class_oh(TwoPair, oh8, lo_b, t)
+}
+
+fn isless_rkomaha(comptime l: []const u8, comptime h: []const u8, comptime board: []const u8) void {
+    const lr = evaluate_omaha_hand(board ++ l) catch @panic("isless_rkomaha invalid hand: " ++ board ++ l);
+    const hr = evaluate_omaha_hand(board ++ h) catch @panic("isless_rkomaha invalid hand: " ++ board ++ h);
+    if (lr.value < lr.value) {
+        const ld = lr.category().describe();
+        const hd = lr.category().describe();
+        std.debug.warn("{} {} {} should lose to {} {} {} board {}", .{ l, lr, ld, h, hr, hd, board });
+    }
+    // else if hilo == 1 && lr.Lo < lr.Lo {
+    // 	ld := RankDescription(lr.Lo)
+    // 	hd := RankDescription(hr.Lo)
+    // 	t.Fatalf("{} {} {} should lose to {} {} {} board {}", .{l, lr, ld, h, hr, hd, board});
+    // }
+
+    // if lr[hilo] < hr[hilo] {
+    // 	ld := RankDescription(lr[hilo])
+    // 	hd := RankDescription(hr[hilo])
+    // 	t.Fatalf("{} {} {} should lose to {} {} {} board {}", l, lr, ld, h, hr, hd, board)
+    // }
+}
+
+fn hand_to_cards(comptime hand_len: u8, hand: []const u8) [hand_len]Card {
+    std.debug.assert(hand_len * 2 == hand.len);
+    var cards: [hand_len]Card = undefined;
+    for (cards) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]) catch @panic("bad card");
+    return cards;
+}
+
+fn is_rank_class_oh(c: Rank.rank_category, comptime h: []const u8, comptime board: []const u8) void {
+    const r = evaluate_omaha_hand(board ++ h) catch @panic("is_rank_class_oh invalid hand: " ++ board ++ h);
+    const rc = r.category();
+    if (rc != c) {
+        const cd = c.describe();
+        const rcd = rc.describe();
+        // t.Fatalf("{} is not rank class {} {} {}", cd, rcd, h, board)
+        const cards = hand_to_cards(9, board ++ h);
+        const r2 = evo(@intCast(c_int, cards[0].id), @intCast(c_int, cards[1].id), @intCast(c_int, cards[2].id), @intCast(c_int, cards[3].id), @intCast(c_int, cards[4].id), @intCast(c_int, cards[5].id), @intCast(c_int, cards[6].id), @intCast(c_int, cards[7].id), @intCast(c_int, cards[8].id));
+        const rc2 = Rank{ .value = @intCast(u16, r2) };
+        std.debug.warn("expected {} but got {} hand {} board {}. c rank class: {}", .{ cd, rcd, h, board, rc2.category() });
+        testing.expect(rc == c);
     }
 }

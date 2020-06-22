@@ -7,7 +7,7 @@ pub fn init(id: u7) Self {
 }
 pub fn initFromName(name: []const u8) !Self {
     std.debug.assert(name.len == 2);
-    const rank = switch (name[0]) {
+    const rank: u7 = switch (name[0]) {
         '2' => 0,
         '3' => 1,
         '4' => 2,
@@ -23,7 +23,7 @@ pub fn initFromName(name: []const u8) !Self {
         'A', 'a' => 12,
         else => return error.invalidRank,
     };
-    const suit = switch (name[1]) {
+    const suit: u7 = switch (name[1]) {
         'C', 'c' => 0,
         'D', 'd' => 1,
         'H', 'h' => 2,

@@ -8,9 +8,8 @@ pub fn build(b: *Builder) void {
     tables.install();
 
     const lib = b.addStaticLibrary("phe", "src/evaluator.zig");
-    // const mode = b.standardReleaseOptions();
-    // lib.setBuildMode(mode);
-    const mode = std.builtin.Mode.ReleaseSafe;
+    const mode = b.standardReleaseOptions();
+    // const mode = std.builtin.Mode.ReleaseSafe;
     lib.setBuildMode(mode);
     lib.linkSystemLibrary("tables");
     lib.addLibPath("./zig-cache/lib");
@@ -23,6 +22,12 @@ pub fn build(b: *Builder) void {
     main_tests.linkLibC();
     main_tests.addIncludeDir("src/PokerHandEvaluator/cpp/src/");
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/evaluator_omaha.c", &[_][]const u8{});
+    // main_tests.exec_cmd_args = true;
+    // const std = @import("std");
+    // if (b.args) |args| for (args) |arg|
+    //     std.debug.warn("arg: {}\n", .{arg});
+    // if (b.args) |args|
+    //     main_tests.exec_cmd_args = @intToPtr(?[*]const ?[]const u8, @ptrToInt(args.ptr)).?[1..args.len];
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
