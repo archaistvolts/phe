@@ -105,7 +105,7 @@ pub fn evaluate_5cards(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     quinary[(d.id >> 2)] += 1;
     quinary[(e.id >> 2)] += 1;
 
-    const hash = hash_quinary(&quinary, 5);
+    const hash = hash_quinary(&quinary, 13, 5);
 
     return Rank{ .value = noflush5[hash] };
 }
@@ -145,14 +145,14 @@ pub fn evaluate_7cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: 
     quinary[(f.id >> 2)] += 1;
     quinary[(g.id >> 2)] += 1;
 
-    const hash = hash_quinary(&quinary, 7);
+    const hash = hash_quinary(&quinary, 13, 7);
 
     return Rank{ .value = noflush7[hash] };
 }
 
-pub fn hash_quinary(q: []const u8, k_: u8) u32 {
+pub fn hash_quinary(q: []const u8, comptime len: u8, k_: u8) u32 {
     var sum: u32 = 0;
-    const len: u16 = 13;
+    // const len: u16 = 13;
     var i: u16 = 0;
     var k = k_;
 
@@ -312,8 +312,8 @@ pub fn evaluate_omaha_cards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1
     quinary_hole[(h3.id >> 2)] += 1;
     quinary_hole[(h4.id >> 2)] += 1;
 
-    const board_hash = hash_quinary(&quinary_board, 5);
-    const hole_hash = hash_quinary(&quinary_hole, 4);
+    const board_hash = hash_quinary(&quinary_board, 13, 5);
+    const hole_hash = hash_quinary(&quinary_hole, 13, 4);
 
     value_noflush = noflush_omaha[board_hash * 1820 + hole_hash];
 
