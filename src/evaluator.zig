@@ -468,8 +468,16 @@ test "TestHoldem" {
 }
 
 fn isless_rk(comptime l: []const u8, comptime h: []const u8, comptime b: []const u8) void {
-    const lr = evaluate_5hand(b ++ l) catch |e| @panic("error: invalid hand passed to evaluate_5hand. " ++ b ++ l);
-    const hr = evaluate_5hand(b ++ h) catch |e| @panic("error: invalid hand passed to evaluate_5hand. " ++ b ++ h);
+    const lf = b ++ l;
+    const hf = b ++ h;
+    std.debug.assert(lf.len == hf.len);
+    const ev_fn = switch (lf.len) {
+        10 => evaluate_5hand,
+        14 => evaluate_7hand,
+        else => @panic("invalid hand length"),
+    };
+    const lr = ev_fn(lf) catch |e| @panic("error: invalid hand passed to evaluate_5hand. " ++ lf);
+    const hr = ev_fn(hf) catch |e| @panic("error: invalid hand passed to evaluate_5hand. " ++ hf);
     if (lr.value < hr.value) {
         std.debug.warn("{} {} should be less than {} {}", .{ l, lr, h, hr });
         testing.expect(lr.value >= hr.value);
