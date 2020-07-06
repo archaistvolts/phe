@@ -1,13 +1,25 @@
 const std = @import("std");
 const Builder = std.build.Builder;
 
+const build_shared_lib = true;
+
 pub fn build(b: *Builder) void {
-    const tables = b.addStaticLibrary("tables", "src/tables.zig");
+    const tables = if (build_shared_lib)
+        b.addSharedLibrary("tables", "src/tables.zig", std.builtin.Version.parse("0.0.0") catch unreachable)
+    else
+        b.addStaticLibrary("tables", "src/tables.zig");
+    if (build_shared_lib)
+        tables.force_pic = true;
     tables.addCSourceFile("src/PokerHandEvaluator/cpp/src/tables_omaha.c", &[_][]const u8{});
     tables.setBuildMode(std.builtin.Mode.ReleaseFast);
     tables.install();
 
-    const lib = b.addStaticLibrary("phe", "src/evaluator.zig");
+    const lib = if (build_shared_lib)
+        b.addSharedLibrary("phe", "src/evaluator.zig", std.builtin.Version.parse("0.0.0") catch unreachable)
+    else
+        b.addStaticLibrary("phe", "src/evaluator.zig");
+    if (build_shared_lib)
+        lib.force_pic = true;
     const mode = b.standardReleaseOptions();
     // const mode = std.builtin.Mode.ReleaseSafe;
     lib.setBuildMode(mode);
@@ -15,20 +27,15 @@ pub fn build(b: *Builder) void {
     lib.addLibPath("./zig-cache/lib");
     lib.install();
 
-    var main_tests = b.addTest("src/evaluator.zig");
+    var main_tests = b.addTest("src/evaluator_tests.zig");
     main_tests.setBuildMode(mode);
     main_tests.linkSystemLibrary("tables");
     main_tests.addLibPath("./zig-cache/lib");
     main_tests.linkLibC();
     main_tests.addIncludeDir("src/PokerHandEvaluator/cpp/src/");
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/evaluator_omaha.c", &[_][]const u8{});
-    // main_tests.exec_cmd_args = true;
-    // const std = @import("std");
-    // if (b.args) |args| for (args) |arg|
-    //     std.debug.warn("arg: {}\n", .{arg});
-    // if (b.args) |args|
-    //     main_tests.exec_cmd_args = @intToPtr(?[*]const ?[]const u8, @ptrToInt(args.ptr)).?[1..args.len];
-
+    // main_tests.setFilter("fuzz");
+    main_tests.test_evented_io = true;
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
 }
