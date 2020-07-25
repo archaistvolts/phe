@@ -18,6 +18,10 @@ extern const flush_sd5: [512]u16;
 extern const noflush_sd5: [1278]u16;
 extern const flush_sd7: [512]u16;
 extern const noflush_sd7: [6030]u16;
+// extern const razz_hashtable: [49205]u16;
+// const razz_hashtable: [49205]u16 = @import("razz_hashtable.zig").razz_hash_lookup;
+extern const razz_hashtable5: [6175]u16;
+// const razz_hashtable5: [6175]u16 = @import("razz_hashtable5.zig").razz_lookup5;
 
 pub const binaries_by_id = [_]u16{
     0x1,    0x1,    0x1,    0x1,
@@ -72,7 +76,7 @@ pub fn evaluateOmahaHand(hand: []const u8) Rank {
     return evaluateOmahaCards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7], cards[8]);
 }
 
-pub fn evaluateCards(cards: []Card, num_ranks: u8) Rank {
+pub fn evaluateCards(cards: []const Card, num_ranks: u8) Rank {
     // for (cards) |c| warn("{}, ", .{c.id});
     // warn("\n", .{});
     return switch (cards.len) {
@@ -110,11 +114,11 @@ pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, num_ranks: u8
 
     var quinary = [1]u6{0} ** 13;
 
-    quinary[(a.id >> 2)] += 1;
-    quinary[(b.id >> 2)] += 1;
-    quinary[(c.id >> 2)] += 1;
-    quinary[(d.id >> 2)] += 1;
-    quinary[(e.id >> 2)] += 1;
+    quinary[a.id >> 2] += 1;
+    quinary[b.id >> 2] += 1;
+    quinary[c.id >> 2] += 1;
+    quinary[d.id >> 2] += 1;
+    quinary[e.id >> 2] += 1;
 
     const hash = hashQuinary(&quinary, num_ranks, 5);
 
@@ -150,13 +154,13 @@ pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
 
     var quinary = [1]u6{0} ** 13;
 
-    quinary[(a.id >> 2)] += 1;
-    quinary[(b.id >> 2)] += 1;
-    quinary[(c.id >> 2)] += 1;
-    quinary[(d.id >> 2)] += 1;
-    quinary[(e.id >> 2)] += 1;
-    quinary[(f.id >> 2)] += 1;
-    quinary[(g.id >> 2)] += 1;
+    quinary[a.id >> 2] += 1;
+    quinary[b.id >> 2] += 1;
+    quinary[c.id >> 2] += 1;
+    quinary[d.id >> 2] += 1;
+    quinary[e.id >> 2] += 1;
+    quinary[f.id >> 2] += 1;
+    quinary[g.id >> 2] += 1;
 
     const hash = hashQuinary(&quinary, num_ranks, 7);
 
@@ -170,6 +174,8 @@ pub fn hashQuinary(q: []const u6, len: u8, k_: u8) u32 {
     // std.debug.warn("hash_quinary {} {}\n", .{ len, k });
 
     while (i < len) : (i += 1) {
+        // std.debug.warn("i {} ", .{i});
+        // std.debug.warn("q[i] {} ", .{q[i]});
         // std.debug.warn("dp[q[i]] {}", .{dp[q[i]]});
         sum += dp[q[i]][len - i - 1][k];
         k -= q[i];
@@ -261,16 +267,16 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
     var quinary_board = [1]u6{0} ** 13;
     var quinary_hole = [1]u6{0} ** 13;
 
-    quinary_board[(c1.id >> 2)] += 1;
-    quinary_board[(c2.id >> 2)] += 1;
-    quinary_board[(c3.id >> 2)] += 1;
-    quinary_board[(c4.id >> 2)] += 1;
-    quinary_board[(c5.id >> 2)] += 1;
+    quinary_board[c1.id >> 2] += 1;
+    quinary_board[c2.id >> 2] += 1;
+    quinary_board[c3.id >> 2] += 1;
+    quinary_board[c4.id >> 2] += 1;
+    quinary_board[c5.id >> 2] += 1;
 
-    quinary_hole[(h1.id >> 2)] += 1;
-    quinary_hole[(h2.id >> 2)] += 1;
-    quinary_hole[(h3.id >> 2)] += 1;
-    quinary_hole[(h4.id >> 2)] += 1;
+    quinary_hole[h1.id >> 2] += 1;
+    quinary_hole[h2.id >> 2] += 1;
+    quinary_hole[h3.id >> 2] += 1;
+    quinary_hole[h4.id >> 2] += 1;
 
     const board_hash = hashQuinary(&quinary_board, 13, 5);
     const hole_hash = hashQuinary(&quinary_hole, 13, 4);
@@ -361,7 +367,7 @@ fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
     return Rank{ .value = noflush_sd7[hash] };
 }
 
-pub fn evaluateCardsShortdeck(cards: []Card) Rank {
+pub fn evaluateCardsShortdeck(cards: []const Card) Rank {
     return switch (cards.len) {
         5 => evaluate5Shortdeck(cards[0], cards[1], cards[2], cards[3], cards[4]),
         7 => evaluate7Shortdeck(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6]),
@@ -369,8 +375,50 @@ pub fn evaluateCardsShortdeck(cards: []Card) Rank {
     };
 }
 
-pub fn cardsToBinary(cards: []Card) u16 {
+pub fn cardsToBinary(cards: []const Card) u16 {
     var result: u16 = 0;
     for (cards) |card| result |= binaries_by_id[card.id];
     return result;
 }
+
+pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
+    var quinary = [1]u6{0} ** 13;
+    quinary[Card.rankToAlo(a.id >> 2)] += 1;
+    quinary[Card.rankToAlo(b.id >> 2)] += 1;
+    quinary[Card.rankToAlo(c.id >> 2)] += 1;
+    quinary[Card.rankToAlo(d.id >> 2)] += 1;
+    quinary[Card.rankToAlo(e.id >> 2)] += 1;
+    const hash = hashQuinary(&quinary, 13, 5);
+    // warn("hash {} razz_hashtable5[hash] {}\n", .{ hash, razz_hashtable5[hash] });
+
+    return Rank.init(razz_hashtable5[hash]);
+}
+
+// evaluate the given 5 card hand and return a score from 0..5082
+pub fn evaluateCardsRazz(cards: []const Card) Rank {
+    // std.debug.assert(cards.len == 5);
+    // const alo_cards = Card.cardsToAlo(5, cards);
+    // for (alo_cards) |c| warn("alo c {}\n", .{c});
+    return switch (cards.len) {
+        5 => evaluate5CardsRazz(cards[0], cards[1], cards[2], cards[3], cards[4]),
+        else => std.debug.panic("invalid cards length: {}", .{cards.len}),
+    };
+}
+// evaluate the given 7 card hand and return a score from 0..5082
+// pub fn evaluate7Razz(cards: []const Card) Rank {
+//     std.debug.assert(cards.len == 7);
+//     const alo_cards = Card.cardsToAlo(7, cards);
+//     // for (alo_cards) |c| warn("alo c {}\n", .{c});
+//     var quinary = [1]u6{0} ** 13;
+//     quinary[alo_cards[0].id >> 2] += 1;
+//     quinary[alo_cards[1].id >> 2] += 1;
+//     quinary[alo_cards[2].id >> 2] += 1;
+//     quinary[alo_cards[3].id >> 2] += 1;
+//     quinary[alo_cards[4].id >> 2] += 1;
+//     quinary[alo_cards[5].id >> 2] += 1;
+//     quinary[alo_cards[6].id >> 2] += 1;
+//     const hash = hashQuinary(&quinary, 13, 7);
+//     // warn("hash {}\n", .{hash});
+
+//     return Rank.init(razz_hashtable[hash]);
+// }

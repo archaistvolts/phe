@@ -1,7 +1,7 @@
 const std = @import("std");
 const Builder = std.build.Builder;
 
-const build_shared_lib = true;
+const build_shared_lib = false;
 
 pub fn build(b: *Builder) void {
     const tables = if (build_shared_lib)
@@ -34,7 +34,7 @@ pub fn build(b: *Builder) void {
     main_tests.linkLibC();
     main_tests.addIncludeDir("src/PokerHandEvaluator/cpp/src/");
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/evaluator_omaha.c", &[_][]const u8{});
-    // main_tests.setFilter("fuzz");
+    main_tests.setFilter("fuzz razz");
     main_tests.test_evented_io = true;
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
