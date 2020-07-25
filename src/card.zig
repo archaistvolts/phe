@@ -25,10 +25,9 @@ pub fn suitToName(c: u2) u8 {
     };
 }
 
-pub fn initFromName(name: []const u8) Card {
-    std.debug.assert(name.len == 2);
-    // std.debug.warn("name {}\n", .{name});
-    const rank: u6 = switch (name[0]) {
+/// '2' => 0, 'A' => 12
+pub fn nameToRank(name: u8) u6 {
+    return switch (name) {
         '2' => 0,
         '3' => 1,
         '4' => 2,
@@ -42,15 +41,20 @@ pub fn initFromName(name: []const u8) Card {
         'Q', 'q' => 10,
         'K', 'k' => 11,
         'A', 'a' => 12,
-        else => @panic("invalid rank"),
+        else => invalid_rank,
     };
+}
+
+pub fn initFromName(name: []const u8) Card {
+    std.debug.assert(name.len == 2);
+    // std.debug.warn("name {}\n", .{name});
+    const rank = nameToRank(name[0]);
     const suit = nameToSuit(name[1]);
     return Card{ .id = rank * 4 + suit };
 }
 
-pub fn initFromNameSd(name: []const u8) Card {
-    std.debug.assert(name.len == 2);
-    const rank: u6 = switch (name[0]) {
+pub fn nameToRankSd(name: u8) u6 {
+    return switch (name) {
         '6' => 0,
         '7' => 1,
         '8' => 2,
@@ -60,14 +64,20 @@ pub fn initFromNameSd(name: []const u8) Card {
         'Q', 'q' => 6,
         'K', 'k' => 7,
         'A', 'a' => 8,
-        else => @panic("invalid rank"),
+        else => invalid_rank,
     };
+}
+
+pub fn initFromNameSd(name: []const u8) Card {
+    std.debug.assert(name.len == 2);
+    const rank: u6 = nameToRankSd(name[0]);
     const suit = nameToSuit(name[1]);
     return Card{ .id = rank * 4 + suit };
 }
 
 pub fn toRankSuit(card: Card) [2]u8 {
-    const rk = card.id / 4;
+    const rk = card.id >> 2;
+    std.debug.assert(rk < 13);
     const rank: u8 = switch (rk) {
         0...7 => '2' + rk,
         8 => 'T',
@@ -77,12 +87,13 @@ pub fn toRankSuit(card: Card) [2]u8 {
         12 => 'A',
         else => '?',
     };
-    const suit = suitToName(@intCast(u2, card.id % 4));
+    const suit = suitToName(@intCast(u2, card.id & 0b11));
     return [2]u8{ rank, suit };
 }
 
 pub fn toRankSuitSd(card: Card) [2]u8 {
-    const rk = card.id / 4;
+    const rk = card.id >> 2;
+    std.debug.assert(rk < 9);
     const rank: u8 = switch (rk) {
         0...3 => '6' + rk,
         4 => 'T',
@@ -92,7 +103,7 @@ pub fn toRankSuitSd(card: Card) [2]u8 {
         8 => 'A',
         else => '?',
     };
-    const st = card.id % 4;
+    const st = card.id & 0b11;
     const suit = suitToName(@intCast(u2, card.id % 4));
     return [2]u8{ rank, suit };
 }
@@ -114,6 +125,7 @@ pub fn cardsToStringSd(cards: []const Card, buf: []u8) []u8 {
 }
 
 pub fn cardsFromString(comptime len: u8, string: []const u8) [len]Card {
+    std.debug.assert(string.len == len * 2);
     var cards: [len]Card = undefined;
     for (cards) |*card, i| card.* = initFromName(string[i * 2 .. i * 2 + 2]);
     return cards;
@@ -132,11 +144,13 @@ pub fn cardsFromStringSd(comptime len: u8, string: []const u8) [len]Card {
     return cards;
 }
 
+const testing = std.testing;
+
 test "round trip ids to string" {
     const util = @import("util.zig");
     var ch: std.event.Channel(?[5]u6) = undefined;
     ch.init(&[_]?[5]u6{});
-    _ = async util.comb5(0, 52, &ch);
+    _ = async util.comb5(0, 13, &ch);
     while (ch.get()) |ids| {
         var cards = cardsFromIds(5, &ids);
         var buf: [10]u8 = undefined;
@@ -144,9 +158,57 @@ test "round trip ids to string" {
         const cards2 = cardsFromString(5, hand);
         var buf2: [10]u8 = undefined;
         const hand2 = cardsToString(cards2[0..5], &buf2);
-        std.testing.expectEqualSlices(u8, hand, hand2);
+        testing.expectEqualSlices(u8, hand, hand2);
         var ids2: [5]u6 = undefined;
         for (cards2) |c, i| ids2[i] = c.id;
-        std.testing.expectEqualSlices(u6, ids[0..], ids2[0..]);
+        testing.expectEqualSlices(u6, ids[0..], ids2[0..]);
     }
+}
+
+/// 'A' => '2', 'Q' => 'K'
+pub fn toAlo(card: Card) Card {
+    // std.debug.warn("toAlo {} {}\n", .{ card.id, card.id >> 2 });
+    return Card.init((rankToAlo(card.id >> 2) << 2) | (card.id & 0b11));
+}
+
+test "toAlo" {
+    testing.expectEqual(Card.initFromName("2c"), Card.toAlo(Card.initFromName("Ac")));
+    testing.expectEqual(Card.initFromName("2s"), Card.toAlo(Card.initFromName("As")));
+    testing.expectEqual(Card.initFromName("3c"), Card.toAlo(Card.initFromName("2c")));
+    testing.expectEqual(Card.initFromName("4c"), Card.toAlo(Card.initFromName("3c")));
+    testing.expectEqual(Card.initFromName("5c"), Card.toAlo(Card.initFromName("4c")));
+    testing.expectEqual(Card.initFromName("6c"), Card.toAlo(Card.initFromName("5c")));
+    testing.expectEqual(Card.initFromName("7c"), Card.toAlo(Card.initFromName("6c")));
+    testing.expectEqual(Card.initFromName("8c"), Card.toAlo(Card.initFromName("7c")));
+    testing.expectEqual(Card.initFromName("9c"), Card.toAlo(Card.initFromName("8c")));
+    testing.expectEqual(Card.initFromName("Tc"), Card.toAlo(Card.initFromName("9c")));
+    testing.expectEqual(Card.initFromName("Jc"), Card.toAlo(Card.initFromName("Tc")));
+    testing.expectEqual(Card.initFromName("Qc"), Card.toAlo(Card.initFromName("Jc")));
+    testing.expectEqual(Card.initFromName("Kc"), Card.toAlo(Card.initFromName("Qc")));
+    testing.expectEqual(Card.initFromName("Ac"), Card.toAlo(Card.initFromName("Kc")));
+    testing.expectEqual(Card.initFromName("As"), Card.toAlo(Card.initFromName("Ks")));
+}
+
+const invalid_rank = std.math.maxInt(u6);
+
+pub fn rankToAlo(rank: u6) u6 {
+    // std.debug.warn("rankToAlo {}\n", .{rank});
+    std.debug.assert(rank < 13);
+    // branchless version
+    // const i = @boolToInt(rank < 12);
+    // return rank + i - @as(u6, ~i) * 12;
+    return switch (rank) {
+        0...11 => rank + 1,
+        12 => 0,
+        else => invalid_rank,
+    };
+}
+
+pub fn cardsToAlo(comptime len: u8, cards: []const Card) [len]Card {
+    std.debug.assert(cards.len == len);
+    var result: [len]Card = undefined;
+    for (result) |*card, i| {
+        card.* = toAlo(cards[i]);
+    }
+    return result;
 }
