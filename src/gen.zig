@@ -27,7 +27,8 @@ const log_counts = false;
 const output_table = true;
 const output_comments = false;
 
-const allocator = std.heap.page_allocator;
+// const allocator = std.heap.page_allocator;
+const allocator = std.heap.c_allocator;
 
 // zig test src/gen.zig --test-evented-io --test-filter gensd5 -lc -L zig-cache/lib -l tables > src/hashtable_sd5.zig
 test "gensd5" {
@@ -216,4 +217,200 @@ fn outputTables(flushes_sd: [512]u16, nonflushes_sd: var, output_comments_: bool
     }
     output("}};\n", .{});
     std.debug.assert(i == nonflushes_sd.len);
+}
+
+// zig test src/gen.zig --test-filter razzBuildFromExisting -lc --test-evented-io -ltables -Lzig-cache/lib -Drelease-fast
+/// use existing lookup values to create razz quinary hash => rank lookup table
+test "razzBuildFromExisting" {
+    const gen_table = false;
+    const debug = true;
+
+    const filename = "../../go/pokerserver/phe/phe_gen/razzLookup.txt";
+    const file = try std.fs.cwd().openFile(filename, .{ .read = true });
+    defer file.close();
+    const stream = &file.inStream();
+    var buf: [20]u8 = undefined;
+    var ranks = [1]u16{0} ** 6162;
+    var max: u32 = 0;
+    var min: u32 = std.math.maxInt(u32);
+    while (try stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+        // warn("line {}\n", .{line});
+        var parts = std.mem.split(line, ":");
+        var hand = [1]u8{'c'} ** 10;
+        const ranks_str = parts.next().?;
+        for (ranks_str) |card, i| hand[i * 2] = card;
+        // warn("hand {}\n", .{hand});
+        const cards = Card.cardsToAlo(5, &Card.cardsFromString(5, &hand));
+        // const alo_cards = Card.cardsToAlo(5, &cards);
+        const rank_str = parts.next().?;
+        const rank = try std.fmt.parseUnsigned(u16, rank_str, 10);
+        var quinary = [1]u6{0} ** 13;
+        for (cards) |card| quinary[card.id >> 2] += 1;
+        const hash = ev.hashQuinary(&quinary, 13, 5);
+        if (debug)
+            warn("{}: {} ({}) ranks '{}' rank_str '{}' \n", .{ hash, rank, hand, ranks_str, rank_str });
+        ranks[hash - 1] = rank + 1;
+        max = std.math.max(hash, max);
+        min = std.math.min(hash, min);
+    }
+    if (gen_table) {
+        // warn("max {} min {}\n", .{ max, min });
+        const items_per_line = 10;
+        output("pub const razz_lookup5 = [_]u16{{\n", .{});
+        var i: usize = 0;
+        while (i < ranks.len) : (i += 1) {
+            var j: usize = i;
+            while (j < std.math.min(i + items_per_line, ranks.len)) : (j += 1) {
+                output("{}, ", .{ranks[j]});
+            }
+            output("\n", .{});
+            i = j - 1;
+        }
+        output("}};\n", .{});
+    }
+}
+
+const RankInfo = struct {
+    rank: u16 = 0,
+    rank_names: []const u8 = undefined,
+};
+const HandsMap = std.StringHashMap(RankInfo);
+
+fn asc_alo_hands(context: void, a: *HandsMap.Entry, b: *HandsMap.Entry) bool {
+    for (a.key) |ae, i| {
+        const be = b.key[i];
+        if (ae == be) continue;
+        return lessthan_rank_alo({}, ae, be);
+    }
+    return false;
+}
+
+fn asc_byrank_alo_hands(context: void, a: *HandsMap.Entry, b: *HandsMap.Entry) bool {
+    return a.value.rank > b.value.rank;
+}
+
+fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
+    return Card.rankToAlo(Card.nameToRank(a)) < Card.rankToAlo(Card.nameToRank(b));
+}
+
+// zig test src/gen.zig --test-filter razzBuild5 -lc --test-evented-io -ltables -Lzig-cache/lib -Drelease-fast > src/razz_hashtable5.zig && zig build test
+/// create a sorted list of all razz hands
+/// keep a separate set for each paired hand class
+/// paired hand classes can be ordered by standard poker alo ev rank
+/// all hands from non-paired hands classes can be stored in a set
+/// these can be ordered by alo card rank (A => 0, K => 12)
+test "razzBuild5" {
+    const len = 5;
+    var chan: std.event.Channel(?[len]u6) = undefined;
+    chan.init(&[_]?[len]u6{});
+    _ = async util.comb5(0, 52, &chan);
+    var fuzz_num_hands: usize = 0;
+    const max_num_hands = 300;
+    var non_paired_hands_map = HandsMap.init(allocator);
+    var onepr_hands_map = HandsMap.init(allocator);
+    var twopr_hands_map = HandsMap.init(allocator);
+    var threekind_hands_map = HandsMap.init(allocator);
+    var fullhouse_hands_map = HandsMap.init(allocator);
+    var fourkind_hands_map = HandsMap.init(allocator);
+    // var ranks = [1]u16{0} ** 6175;
+    var ranks = [1]RankInfo{.{}} ** 6175;
+
+    defer {
+        non_paired_hands_map.deinit();
+        onepr_hands_map.deinit();
+        twopr_hands_map.deinit();
+        threekind_hands_map.deinit();
+        fullhouse_hands_map.deinit();
+        fourkind_hands_map.deinit();
+    }
+    while (chan.get()) |ids| {
+        const cards = Card.cardsFromIds(5, &ids);
+        var rank = ev.evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], 13);
+        const category = rank.category();
+        const map_to_use = switch (category) {
+            .straight_flush, .flush, .straight, .high_card => &non_paired_hands_map,
+            .one_pair => &onepr_hands_map,
+            .two_pair => &twopr_hands_map,
+            .three_of_a_kind => &threekind_hands_map,
+            .full_house => &fullhouse_hands_map,
+            .four_of_a_kind => &fourkind_hands_map,
+            else => std.debug.panic("invalid category {}\n", .{category}),
+        };
+        var buf: [10]u8 = undefined;
+        const hand = Card.cardsToString(&cards, &buf);
+        var rank_names = [_]u8{ hand[0], hand[2], hand[4], hand[6], hand[8] };
+        if (std.mem.indexOfScalar(Rank.Category, &[_]Rank.Category{ .straight_flush, .flush, .straight, .high_card }, category) != null) {
+            std.sort.sort(u8, &rank_names, {}, lessthan_rank_alo);
+            std.mem.reverse(u8, &rank_names);
+        } else {
+            const cards_alo = Card.cardsToAlo(5, &cards);
+            rank = ev.evaluate5Cards(cards_alo[0], cards_alo[1], cards_alo[2], cards_alo[3], cards_alo[4], 13);
+        }
+        const hr = try std.mem.dupe(allocator, u8, &rank_names);
+        _ = try map_to_use.put(hr, .{ .rank = rank.value, .rank_names = hr });
+        fuzz_num_hands += 1;
+    }
+    const hands_maps = [_]*HandsMap{ &non_paired_hands_map, &onepr_hands_map, &twopr_hands_map, &threekind_hands_map, &fullhouse_hands_map, &fourkind_hands_map };
+    // warn("non_paired_hands_map count {}", .{non_paired_hands_map.count()});
+    var hand_rank: u16 = 0;
+    for (hands_maps) |hands_map| {
+        // output("// hands_map count {}\n", .{hands_map.count()});
+        var hands_list = std.ArrayList(*HandsMap.Entry).init(allocator);
+        defer hands_list.deinit();
+        var it = hands_map.iterator();
+        while (it.next()) |kv| _ = try hands_list.append(kv);
+        if (hands_map == &non_paired_hands_map) {
+            // output("// non_paired_hands_map\n", .{});
+            std.sort.sort(*HandsMap.Entry, hands_list.items, {}, asc_alo_hands);
+        } else
+            std.sort.sort(*HandsMap.Entry, hands_list.items, {}, asc_byrank_alo_hands);
+
+        for (hands_list.items) |entry, i| {
+            // output("{}, // {}\n", .{ hand_rank, entry.key });
+            hand_rank += 1;
+            var quinary = [1]u6{0} ** 13;
+            for (entry.key) |r|
+                quinary[Card.rankToAlo(Card.nameToRank(r))] += 1;
+            const hash = ev.hashQuinary(&quinary, 13, 5);
+            std.testing.expectEqual(ranks[hash].rank, 0);
+            ranks[hash] = .{ .rank = hand_rank, .rank_names = entry.key };
+        }
+    }
+    const items_per_line = 10;
+    var current_map = non_paired_hands_map;
+    var current_map_i: u16 = 0;
+    output("pub const razz_lookup5 = [_]u16 {{\n", .{});
+    var i: usize = 0;
+    while (i < ranks.len) : (i += 1) {
+        if (output_comments) {
+            output("{}, // {}\n", .{ ranks[i].rank, ranks[i].rank_names });
+        } else {
+            var j: usize = i;
+            while (j < std.math.min(i + items_per_line, ranks.len)) : (j += 1) {
+                output("{}, ", .{ranks[j]});
+            }
+            output("\n", .{});
+            i = j - 1;
+        }
+    }
+    output("}};\n", .{});
+}
+
+fn x(hand: var, i: usize, hands_list: var, hand_rank: usize) void {
+    var flush_hand = [1]u8{'c'} ** 10;
+    for (hand) |c, j| flush_hand[j * 2] = c;
+    if (i == 0) {
+        const cards_wheel = Card.cardsFromString(5, &flush_hand);
+        testing.expectEqual(evaluate5Razz(&cards_wheel).value, 1);
+    } else {
+        var flush_hand2 = [1]u8{'c'} ** 10;
+        for (hands_list.items[i - 1]) |c, j| flush_hand2[j * 2] = c;
+        const r = evaluate5Razz(&Card.cardsFromString(5, &flush_hand));
+        const r_prev = evaluate5Razz(&Card.cardsFromString(5, &flush_hand2));
+        const expected = r_prev.value < r.value;
+        if (!expected) {
+            warn("h {}-{} h_prev {}-{}\n", .{ flush_hand, r.value, flush_hand2, r_prev.value });
+            testing.expect(expected);
+        }
+    }
 }
