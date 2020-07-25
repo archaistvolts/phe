@@ -9,11 +9,12 @@ const ev7 = @import("phe.c.zig").ev7;
 const util = @import("util.zig");
 
 // compare against c version
-test "EvaluateAll5" {
+test "evAll5" {
     var fuzz_num_hands: usize = 0;
-    var total_time: i128 = 0;
+    var total_time: u64 = 0;
     defer printBencharkInfo(total_time, fuzz_num_hands, 5, "evaluateCards");
     var a: u6 = 0;
+    var tmr = try std.time.Timer.start();
     while (a < 48) : (a += 1) {
         var b: u6 = a + 1;
         while (b < 49) : (b += 1) {
@@ -23,9 +24,9 @@ test "EvaluateAll5" {
                 while (d < 51) : (d += 1) {
                     var e: u6 = d + 1;
                     while (e < 52) : (e += 1) {
-                        const t = std.time.nanoTimestamp();
+                        tmr.reset();
                         const rank = evaluateCards(&[_]Card{ Card.init(a), Card.init(b), Card.init(c), Card.init(d), Card.init(e) }, 13);
-                        total_time += std.time.nanoTimestamp() - t;
+                        total_time += tmr.read();
                         const c_rank = ev5.evaluate_5cards(a, b, c, d, e);
                         testing.expectEqual(rank.value, @intCast(u16, c_rank));
                         fuzz_num_hands += 1;
@@ -36,10 +37,11 @@ test "EvaluateAll5" {
     }
 }
 
-test "EvaluateAll7" {
+test "evAll7" {
     var fuzz_num_hands: usize = 0;
-    var total_time: i128 = 0;
+    var total_time: u64 = 0;
     defer printBencharkInfo(total_time, fuzz_num_hands, 7, "evaluateCards");
+    var tmr = try std.time.Timer.start();
 
     var a: u6 = 0;
     while (a < 46) : (a += 1) {
@@ -55,9 +57,9 @@ test "EvaluateAll7" {
                         while (f < 51) : (f += 1) {
                             var g: u6 = f + 1;
                             while (g < 52) : (g += 1) {
-                                const t = std.time.nanoTimestamp();
+                                tmr.reset();
                                 const rank = evaluateCards(&[_]Card{ Card.init(a), Card.init(b), Card.init(c), Card.init(d), Card.init(e), Card.init(f), Card.init(g) }, 13);
-                                total_time += std.time.nanoTimestamp() - t;
+                                total_time += tmr.read();
                                 const c_rank = ev7.evaluate_7cards(a, b, c, d, e, f, g);
                                 testing.expectEqual(rank.value, @intCast(u16, c_rank));
                                 fuzz_num_hands += 1;
@@ -380,16 +382,18 @@ test "shortdeck" {
     }
 }
 
-fn printDebugInfo(len: usize, h: []Card, h2: []Card, rank: Rank, rank2: Rank, rank_sd: Rank, rank_sd2: Rank, cat: Rank.Category, cat2: Rank.Category, sdcat: Rank.Category, sd2cat: Rank.Category, bin: u16, bin2: u16) void {
+fn printDebugInfo(comptime ev_name: []const u8, len: usize, h: []Card, h2: []Card, rank: Rank, rank2: Rank, rank_sd: Rank, rank_sd2: Rank, cat: Rank.Category, cat2: Rank.Category, sdcat: Rank.Category, sd2cat: Rank.Category, bin: u16, bin2: u16) void {
     var buf: [20]u8 = undefined;
     var buf2: [20]u8 = undefined;
-    std.debug.warn("\nevaluate{}Shortdeck didn't match evaluate{} ({}  {}) sd ({}-{} {}-{}) expected ({}-{} {}-{})\n", .{
-        len,                           len,
-        Card.cardsToStringSd(h, &buf), Card.cardsToStringSd(h2, &buf2),
-        rank_sd.value,                 sdcat.describe(),
-        rank_sd2.value,                sd2cat.describe(),
-        rank.value,                    cat.describe(),
-        rank2.value,                   cat2.describe(),
+    const cardsToSFn = if (std.meta.eql(ev_name, "sd")) Card.cardsToStringSd else Card.cardsToString;
+    std.debug.warn("\nevaluate{}{12} didn't match evaluate{} ({}  {}) {12} ({}-{} {}-{}) expected ({}-{} {}-{})\n", .{
+        len,                 len,
+        cardsToSFn(h, &buf), cardsToSFn(h2, &buf2),
+        rank_sd.value,       sdcat.describe(),
+        rank_sd2.value,      sd2cat.describe(),
+        rank.value,          cat.describe(),
+        rank2.value,         cat2.describe(),
+        ev_name,
     });
     std.debug.warn("bin {b:0<9} bin2 {b:0<9}\n", .{ bin, bin2 });
 }
@@ -399,29 +403,30 @@ const EvCardsLenFn = fn ([]Card, u8) Rank;
 // const fuzz_num_hands = 100_000;
 
 /// fuzz test short deck evaluations
-/// Compare short deck evaluation of 2 random hands against standard evaluation
+/// Compare short deck evaluation of every possible hand against random hand
 /// by making sure both are <= or both are >=.
 /// This won't hold for a6789 straights and straight flushes or flush vs full house comparisons
-/// so these are validated.
-fn sdTest(comptime len: u8, ev_fn_name: []const u8) void {
+/// so these are validated differently.
+fn sdTest(comptime len: u8, ev_fn_name: []const u8) !void {
     const evfn: EvCardsFn = evaluateCardsShortdeck;
     const expected_evfn: EvCardsLenFn = evaluateCards;
     const combFn = if (len == 5) util.comb5 else if (len == 7) util.comb7 else @panic("unsupported length");
     const allocator = std.heap.page_allocator;
-    var total_time: i128 = 0;
+    var total_time: u64 = 0;
     var fuzz_num_hands: usize = 0;
     defer printBencharkInfo(total_time, fuzz_num_hands, len, ev_fn_name);
     var i: usize = 0;
     var chan: std.event.Channel(?[len]u6) = undefined;
     chan.init(&[_]?[len]u6{});
     _ = async combFn(0, 36, &chan);
+    var tmr = try std.time.Timer.start();
     while (chan.get()) |ids| : (fuzz_num_hands += 1) {
         var h = Card.cardsFromIds(len, &ids);
         var h2 = randomCardSample(len, allocator, 0, 36) catch @panic("error in randomCardSample");
 
-        const t = std.time.nanoTimestamp();
+        tmr.reset();
         const sdrank = evfn(&h);
-        total_time += std.time.nanoTimestamp() - t;
+        total_time += tmr.read();
         const sdrank2 = evfn(&h2);
 
         const rank = expected_evfn(&h, 13);
@@ -448,7 +453,7 @@ fn sdTest(comptime len: u8, ev_fn_name: []const u8) void {
                     const expected = sdcat == .straight or sdcat == .straight_flush;
                     if (sdcat == .flush) {} // possible to have straight and flush but not straight flush w/ 7 cards
                     else if (!expected) {
-                        printDebugInfo(len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
+                        printDebugInfo("sd", len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
                         testing.expect(expected);
                     }
                 }
@@ -456,31 +461,31 @@ fn sdTest(comptime len: u8, ev_fn_name: []const u8) void {
                     const expected = sdcat2 == .straight or sdcat2 == .straight_flush;
                     if (sdcat2 == .flush) {} // possible to have straight and flush but not straight flush w/ 7 cards
                     else if (!expected) {
-                        printDebugInfo(len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
+                        printDebugInfo("sd", len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
                         testing.expect(expected);
                     }
                 }
             } else if (std.mem.eql(Rank.Category, &classes, &[_]Rank.Category{ .flush, .full_house, .flush, .full_house })) {
                 const expected = sdrank.value < sdrank2.value and rank.value > rank2.value;
                 if (!expected) {
-                    printDebugInfo(len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
+                    printDebugInfo("sd", len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
                     testing.expect(expected);
                 }
             } else if (std.mem.eql(Rank.Category, &classes, &[_]Rank.Category{ .full_house, .flush, .full_house, .flush })) {
                 const expected = sdrank.value > sdrank2.value and rank.value < rank2.value;
                 if (!expected) {
-                    printDebugInfo(len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
+                    printDebugInfo("sd", len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
                     testing.expect(expected);
                 }
             } else {
-                printDebugInfo(len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
+                printDebugInfo("sd", len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
                 testing.expect(false);
             }
         }
     }
 }
 
-fn printBencharkInfo(total_time: i128, fuzz_num_hands: usize, len: usize, ev_fn_name: []const u8) void {
+fn printBencharkInfo(total_time: u64, fuzz_num_hands: usize, len: usize, ev_fn_name: []const u8) void {
     const total_seconds = @intToFloat(f32, total_time) / @intToFloat(f32, std.time.ns_per_s);
     const hands_per_s = @intToFloat(f32, fuzz_num_hands) / total_seconds / 1000;
 
@@ -488,9 +493,77 @@ fn printBencharkInfo(total_time: i128, fuzz_num_hands: usize, len: usize, ev_fn_
 }
 
 test "fuzz shortdeck5" {
-    sdTest(5, "evaluateShortdeck");
+    try sdTest(5, "evaluateShortdeck");
 }
 
 test "fuzz shortdeck7" {
-    sdTest(7, "evaluateShortdeck");
+    try sdTest(7, "evaluateShortdeck");
+}
+
+test "razz ev5" {
+    const hands = .{
+        "5432a", "6432a", "6532a", "6542a", "6543a", "65432", "7432a", "7543a", "75432", "7632a", "7642a",
+        "7643a", "76432", "7652a", "7653a", "7654a", "76542", "76543", "8432a", "8532a", "8542a", "8543a",
+        "85432", "89tjq", "8tjqk", "9tjqk", "aa234", "aa235", "aajkq", "22a34", "22a35", "22jkq", "aa223",
+        "aa224", "aa22k", "qqkka", "qqkk2", "qqkkj", "aaa22", "aaa33", "22233", "22244", "jjjqq", "jjjkk",
+        "qqqkk", "qqkkk", "aaaa2", "aaaa3", "kkkkj", "kkkkq",
+    };
+    inline for (.{ makeFlush, makeNonFlush }) |makeFn| {
+        const cards_wheel = Card.cardsFromString(5, &makeFn(hands[0]));
+        // for (cards_wheel) |c| warn("c {}\n", .{c});
+        testing.expectEqual(evaluateCardsRazz(&cards_wheel).value, 1);
+        inline for (hands) |h, i| {
+            if (i == 0) continue;
+            const r = evaluateCardsRazz(&Card.cardsFromString(5, &makeFn(h)));
+            const r_prev = evaluateCardsRazz(&Card.cardsFromString(5, &makeFn(hands[i - 1])));
+            const expected = r_prev.value < r.value;
+            // warn("h {}-{} h_prev {}-{}\n", .{ h, r.value, hands[i - 1], r_prev.value });
+            if (!expected) testing.expect(expected);
+        }
+    }
+}
+
+fn razzFuzzTest(comptime len: u8, ev_fn_name: []const u8) !void {
+    const evfn: EvCardsFn = evaluateCardsRazz;
+    const expected_evfn: EvCardsLenFn = evaluateCards;
+    const combFn = if (len == 5) util.comb5 else if (len == 7) util.comb7 else @panic("unsupported length");
+    const allocator = std.heap.page_allocator;
+    var total_time: u64 = 0;
+    var fuzz_num_hands: usize = 0;
+    defer printBencharkInfo(total_time, fuzz_num_hands, len, ev_fn_name);
+    var chan: std.event.Channel(?[len]u6) = undefined;
+    chan.init(&[_]?[len]u6{});
+    _ = async combFn(0, 52, &chan);
+    var tmr = try std.time.Timer.start();
+    while (chan.get()) |ids| : (fuzz_num_hands += 1) {
+        var h = Card.cardsFromIds(len, &ids);
+        var h2 = randomCardSample(len, allocator, 0, 52) catch @panic("error in randomCardSample");
+
+        tmr.reset();
+        const rzrank = evfn(&h);
+        total_time += tmr.read();
+        const rzrank2 = evfn(&h2);
+
+        var rank = expected_evfn(&Card.cardsToAlo(5, &h), 13);
+        var rank2 = expected_evfn(&Card.cardsToAlo(5, &h2), 13);
+        // skip straights and flushes
+        const ignore_categories = &[_]Rank.Category{ .straight_flush, .flush, .straight };
+        if (std.mem.indexOfScalar(Rank.Category, ignore_categories, rank.category()) != null) continue;
+        if (std.mem.indexOfScalar(Rank.Category, ignore_categories, rank2.category()) != null) continue;
+
+        const cat = rank.category();
+        const cat2 = rank2.category();
+
+        const both_lte = rzrank.value >= rzrank2.value and rank.value <= rank2.value;
+        const both_gte = rzrank.value <= rzrank2.value and rank.value >= rank2.value;
+
+        if (!(both_gte or both_lte)) {
+            printDebugInfo("razz", len, &h, &h2, rank, rank2, rzrank, rzrank2, cat, cat2, .invalid, .invalid, 0, 0);
+            testing.expect(false);
+        }
+    }
+}
+
+test "fuzz razz 5" {
+    try razzFuzzTest(5, "evaluateCardsRazz");
 }
