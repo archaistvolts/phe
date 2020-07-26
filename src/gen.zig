@@ -220,7 +220,7 @@ fn outputTables(flushes_sd: [512]u16, nonflushes_sd: var, output_comments_: bool
 }
 
 // zig test src/gen.zig --test-filter razzBuildFromExisting -lc --test-evented-io -ltables -Lzig-cache/lib -Drelease-fast
-/// use existing lookup values to create razz quinary hash => rank lookup table
+// use existing lookup values to create razz quinary hash => rank lookup table
 test "razzBuildFromExisting" {
     const gen_table = false;
     const debug = true;
@@ -294,11 +294,11 @@ fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
 }
 
 // zig test src/gen.zig --test-filter razzBuild5 -lc --test-evented-io -ltables -Lzig-cache/lib -Drelease-fast > src/razz_hashtable5.zig && zig build test
-/// create a sorted list of all razz hands
-/// keep a separate set for each paired hand class
-/// paired hand classes can be ordered by standard poker alo ev rank
-/// all hands from non-paired hands classes can be stored in a set
-/// these can be ordered by alo card rank (A => 0, K => 12)
+// create a sorted list of all razz hands
+// keep a separate set for each paired hand class
+// paired hand classes can be ordered by standard poker alo ev rank
+// all hands from non-paired hands classes can be stored in a set
+// these can be ordered by alo card rank (A => 0, K => 12)
 test "razzBuild5" {
     const len = 5;
     var chan: std.event.Channel(?[len]u6) = undefined;
@@ -387,7 +387,7 @@ test "razzBuild5" {
         } else {
             var j: usize = i;
             while (j < std.math.min(i + items_per_line, ranks.len)) : (j += 1) {
-                output("{}, ", .{ranks[j]});
+                output("{}, ", .{ranks[j].rank});
             }
             output("\n", .{});
             i = j - 1;
