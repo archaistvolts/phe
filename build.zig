@@ -21,7 +21,6 @@ pub fn build(b: *Builder) void {
     if (build_shared_lib)
         lib.force_pic = true;
     const mode = b.standardReleaseOptions();
-    // const mode = std.builtin.Mode.ReleaseSafe;
     lib.setBuildMode(mode);
     lib.linkSystemLibrary("tables");
     lib.addLibPath("./zig-cache/lib");
@@ -34,8 +33,26 @@ pub fn build(b: *Builder) void {
     main_tests.linkLibC();
     main_tests.addIncludeDir("src/PokerHandEvaluator/cpp/src/");
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/evaluator_omaha.c", &[_][]const u8{});
-    main_tests.setFilter("fuzz razz");
+    // main_tests.setFilter("fuzz razz");
     main_tests.test_evented_io = true;
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
+
+    const exe = b.addExecutable("phe", "src/evaluator_tests.zig");
+    exe.setBuildMode(mode);
+    exe.linkSystemLibrary("tables");
+    exe.addLibPath("./zig-cache/lib");
+    exe.install();
+
+    if (false) {
+        const tracy = b.option([]const u8, "tracy", "Enable Tracy integration. Supply path to Tracy source");
+        exe.addBuildOption(bool, "enable_tracy", tracy != null);
+        if (tracy) |tracy_path| {
+            const client_cpp = std.fs.path.join(b.allocator, &[_][]const u8{ tracy_path, "TracyClient.cpp" }) catch unreachable;
+            exe.addIncludeDir(tracy_path);
+            exe.addCSourceFile(client_cpp, &[_][]const u8{ "-DTRACY_ENABLE=1", "-fno-sanitize=undefined" });
+            exe.linkSystemLibraryName("c++");
+            exe.linkLibC();
+        }
+    }
 }

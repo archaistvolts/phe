@@ -55,14 +55,14 @@ pub const suitbit_by_id = [_]u16{
     0x1, 0x8, 0x40, 0x200,
 };
 
-pub fn evaluate5Hand(hand: []const u8, num_ranks: u8) Rank {
+pub fn evaluate5Hand(hand: []const u8, comptime num_ranks: u8) Rank {
     std.debug.assert(hand.len == 10);
     var cards: [5]Card = undefined;
     for (cards) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
     return evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], num_ranks);
 }
 
-pub fn evaluate7Hand(hand: []const u8, num_ranks: u8) Rank {
+pub fn evaluate7Hand(hand: []const u8, comptime num_ranks: u8) Rank {
     std.debug.assert(hand.len == 14);
     var cards: [7]Card = undefined;
     for (cards) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
@@ -76,7 +76,7 @@ pub fn evaluateOmahaHand(hand: []const u8) Rank {
     return evaluateOmahaCards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7], cards[8]);
 }
 
-pub fn evaluateCards(cards: []const Card, num_ranks: u8) Rank {
+pub fn evaluateCards(cards: []const Card, comptime num_ranks: u8) Rank {
     // for (cards) |c| warn("{}, ", .{c.id});
     // warn("\n", .{});
     return switch (cards.len) {
@@ -90,30 +90,26 @@ pub fn evaluateCards(cards: []const Card, num_ranks: u8) Rank {
 // The rest of it represent the rank, ranged from 0-12.
 // 13 * 4 gives 52 ids.
 //
-pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, num_ranks: u8) Rank {
+pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, comptime num_ranks: u8) Rank {
     var suit_hash: u16 = 0;
-
     suit_hash += suitbit_by_id[a.id];
     suit_hash += suitbit_by_id[b.id];
     suit_hash += suitbit_by_id[c.id];
     suit_hash += suitbit_by_id[d.id];
     suit_hash += suitbit_by_id[e.id];
-    const suit = suits[suit_hash];
 
+    const suit = suits[suit_hash];
     if (suit != 0) {
         var suit_binary = [1]u16{0} ** 4;
-
         suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
         suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
         suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
         suit_binary[d.id & 0x3] |= binaries_by_id[d.id];
         suit_binary[e.id & 0x3] |= binaries_by_id[e.id];
-
         return Rank{ .value = flush[suit_binary[suit - 1]] };
     }
 
     var quinary = [1]u6{0} ** 13;
-
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -125,7 +121,7 @@ pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, num_ranks: u8
     return Rank{ .value = noflush5[hash] };
 }
 
-pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card, num_ranks: u8) Rank {
+pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card, comptime num_ranks: u8) Rank {
     var suit_hash: u16 = 0;
 
     suit_hash += suitbit_by_id[a.id];
@@ -167,13 +163,13 @@ pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
     return Rank{ .value = noflush7[hash] };
 }
 
-pub fn hashQuinary(q: []const u6, len: u8, k_: u8) u32 {
+pub fn hashQuinary(q: []const u6, comptime len: u8, k_: u8) u32 {
     var sum: u32 = 0;
-    var i: u16 = 0;
+    comptime var i: u16 = 0;
     var k = k_;
     // std.debug.warn("hash_quinary {} {}\n", .{ len, k });
 
-    while (i < len) : (i += 1) {
+    inline while (i < len) : (i += 1) {
         // std.debug.warn("i {} ", .{i});
         // std.debug.warn("q[i] {} ", .{q[i]});
         // std.debug.warn("dp[q[i]] {}", .{dp[q[i]]});
@@ -181,7 +177,6 @@ pub fn hashQuinary(q: []const u6, len: u8, k_: u8) u32 {
         k -= q[i];
         if (k <= 0) break;
     }
-
     return sum;
 }
 
@@ -294,26 +289,25 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
 // 9 * 4 gives 36 ids.
 fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     var suit_hash: u16 = 0;
-    var suit_binary = [1]u16{0} ** 4;
-    var quinary = [1]u6{0} ** 9;
-
     suit_hash += suitbit_by_id[a.id];
     suit_hash += suitbit_by_id[b.id];
     suit_hash += suitbit_by_id[c.id];
     suit_hash += suitbit_by_id[d.id];
     suit_hash += suitbit_by_id[e.id];
+
     const suit = suits[suit_hash];
     if (suit != 0) {
+        var suit_binary = [1]u16{0} ** 4;
         suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
         suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
         suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
         suit_binary[d.id & 0x3] |= binaries_by_id[d.id];
         suit_binary[e.id & 0x3] |= binaries_by_id[e.id];
         // std.debug.warn("suit_binary[suit - 1] {}\n", .{suit_binary[suit - 1]});
-
         return Rank{ .value = flush_sd5[suit_binary[suit - 1]] };
     }
 
+    var quinary = [1]u6{0} ** 9;
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -331,9 +325,6 @@ fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
 // 9 * 4 gives 36 ids.
 fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
     var suit_hash: u16 = 0;
-    var suit_binary = [1]u16{0} ** 4;
-    var quinary = [1]u6{0} ** 9;
-
     suit_hash += suitbit_by_id[a.id];
     suit_hash += suitbit_by_id[b.id];
     suit_hash += suitbit_by_id[c.id];
@@ -344,6 +335,7 @@ fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
 
     const suit = suits[suit_hash];
     if (suit != 0) {
+        var suit_binary = [1]u16{0} ** 4;
         suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
         suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
         suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
@@ -354,6 +346,7 @@ fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
         return Rank{ .value = flush_sd7[suit_binary[suit - 1]] };
     }
 
+    var quinary = [1]u6{0} ** 9;
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -381,6 +374,22 @@ pub fn cardsToBinary(cards: []const Card) u16 {
     return result;
 }
 
+pub fn evaluate5CardsRazz2(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
+    var quinary = [1]u6{0} ** 13;
+    const cards = Card.cardsToAlo(5, &[_]Card{ a, b, c, d, e });
+    // inline for ()) |card|
+    //     quinary[card.id >> 2] += 1;
+    quinary[cards[0].id >> 2] += 1;
+    quinary[cards[1].id >> 2] += 1;
+    quinary[cards[2].id >> 2] += 1;
+    quinary[cards[3].id >> 2] += 1;
+    quinary[cards[4].id >> 2] += 1;
+    const hash = hashQuinary(&quinary, 13, 5);
+    // warn("hash {} razz_hashtable5[hash] {}\n", .{ hash, razz_hashtable5[hash] });
+
+    return Rank.init(razz_hashtable5[hash]);
+}
+
 pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     var quinary = [1]u6{0} ** 13;
     quinary[Card.rankToAlo(a.id >> 2)] += 1;
@@ -394,13 +403,28 @@ pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     return Rank.init(razz_hashtable5[hash]);
 }
 
+pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
+    var quinary = [1]u6{0} ** 13;
+    const u6x5 = std.meta.Vector(5, u6);
+    var ranks = u6x5{ a.id, b.id, c.id, d.id, e.id };
+    ranks >>= @splat(5, @as(u3, 2));
+    ranks = (ranks + @splat(5, @as(u6, 1))) % @splat(5, @as(u6, 13));
+
+    comptime var i: u8 = 0;
+    inline while (i < 5) : (i += 1) quinary[ranks[i]] += 1;
+    const hash = hashQuinary(&quinary, 13, 5);
+    // warn("hash {} razz_hashtable5[hash] {}\n", .{ hash, razz_hashtable5[hash] });
+
+    return Rank.init(razz_hashtable5[hash]);
+}
+
 // evaluate the given 5 card hand and return a score from 0..5082
 pub fn evaluateCardsRazz(cards: []const Card) Rank {
     // std.debug.assert(cards.len == 5);
     // const alo_cards = Card.cardsToAlo(5, cards);
     // for (alo_cards) |c| warn("alo c {}\n", .{c});
     return switch (cards.len) {
-        5 => evaluate5CardsRazz(cards[0], cards[1], cards[2], cards[3], cards[4]),
+        5 => evaluate5CardsRazzVec(cards[0], cards[1], cards[2], cards[3], cards[4]),
         else => std.debug.panic("invalid cards length: {}", .{cards.len}),
     };
 }

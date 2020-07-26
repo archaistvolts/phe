@@ -190,25 +190,16 @@ test "toAlo" {
 }
 
 const invalid_rank = std.math.maxInt(u6);
-
 pub fn rankToAlo(rank: u6) u6 {
     // std.debug.warn("rankToAlo {}\n", .{rank});
     std.debug.assert(rank < 13);
-    // branchless version
-    // const i = @boolToInt(rank < 12);
-    // return rank + i - @as(u6, ~i) * 12;
-    return switch (rank) {
-        0...11 => rank + 1,
-        12 => 0,
-        else => invalid_rank,
-    };
+    return (rank + 1) % 13;
 }
 
 pub fn cardsToAlo(comptime len: u8, cards: []const Card) [len]Card {
     std.debug.assert(cards.len == len);
     var result: [len]Card = undefined;
-    for (result) |*card, i| {
-        card.* = toAlo(cards[i]);
-    }
+    comptime var i: u8 = 0;
+    inline while (i < len) : (i += 1) result[i] = toAlo(cards[i]);
     return result;
 }
