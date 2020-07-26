@@ -93,6 +93,50 @@ test "sanity" {
     std.testing.expectEqual(i, combs75.len);
 }
 
+pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: var) void, ctx: var) void {
+    var a: u6 = lo;
+    while (a < hi - 4) : (a += 1) {
+        var b: u6 = a + 1;
+        while (b < hi - 3) : (b += 1) {
+            var c: u6 = b + 1;
+            while (c < hi - 2) : (c += 1) {
+                var d: u6 = c + 1;
+                while (d < hi - 1) : (d += 1) {
+                    var e: u6 = d + 1;
+                    while (e < hi) : (e += 1) {
+                        cb([5]u6{ a, b, c, d, e }, ctx);
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn comb7Cb(lo: u6, hi: u6, comptime cb: fn ([7]u6, ctx: var) void, ctx: var) void {
+    var y: u6 = lo;
+    while (y < hi - 6) : (y += 1) {
+        var z: u6 = y + 1;
+        while (z < hi - 5) : (z += 1) {
+            var a: u6 = z + 1;
+            while (a < hi - 4) : (a += 1) {
+                var b: u6 = a + 1;
+                while (b < hi - 3) : (b += 1) {
+                    var c: u6 = b + 1;
+                    while (c < hi - 2) : (c += 1) {
+                        var d: u6 = c + 1;
+                        while (d < hi - 1) : (d += 1) {
+                            var e: u6 = d + 1;
+                            while (e < hi) : (e += 1) {
+                                cb([7]u6{ y, z, a, b, c, d, e }, ctx);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // pub fn nested_loop(comptime lo: isize, comptime hi: isize, comptime n: usize, loop_level: usize, data: var, f: var) void {
 //     if (loop_level > n) {
 //         return f(loop_level, data);
