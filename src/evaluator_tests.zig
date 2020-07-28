@@ -12,15 +12,15 @@ const util = @import("util.zig");
 const BenchmarkCtx = struct {
     fuzz_num_hands: usize,
     total_time: u64,
-    tmr: std.time.Timer,
+    timer: std.time.Timer,
 };
 // compare against c version
 test "evAll5" {
     const cb = struct {
         fn func(ids: [5]u6, ctx: var) void {
-            ctx.tmr.reset();
+            ctx.timer.reset();
             const rank = evaluateCards(&[_]Card{ Card.init(ids[0]), Card.init(ids[1]), Card.init(ids[2]), Card.init(ids[3]), Card.init(ids[4]) }, 13);
-            ctx.total_time += ctx.tmr.read();
+            ctx.total_time += ctx.timer.read();
             const c_rank = ev5.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
             testing.expectEqual(rank.value, @intCast(u16, c_rank));
             ctx.fuzz_num_hands += 1;
@@ -29,7 +29,7 @@ test "evAll5" {
     var ctx = BenchmarkCtx{
         .fuzz_num_hands = @as(usize, 0),
         .total_time = @as(u64, 0),
-        .tmr = try std.time.Timer.start(),
+        .timer = try std.time.Timer.start(),
     };
     util.comb5Cb(0, 52, cb, &ctx);
     printBencharkInfo(ctx.total_time, ctx.fuzz_num_hands, 7, "evaluateCards");
@@ -38,9 +38,9 @@ test "evAll5" {
 test "evAll7" {
     const cb = struct {
         fn func(ids: [7]u6, ctx: var) void {
-            ctx.tmr.reset();
+            ctx.timer.reset();
             const rank = evaluateCards(&[_]Card{ Card.init(ids[0]), Card.init(ids[1]), Card.init(ids[2]), Card.init(ids[3]), Card.init(ids[4]), Card.init(ids[5]), Card.init(ids[6]) }, 13);
-            ctx.total_time += ctx.tmr.read();
+            ctx.total_time += ctx.timer.read();
             const c_rank = ev7.evaluate_7cards(ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]);
             testing.expectEqual(rank.value, @intCast(u16, c_rank));
             ctx.fuzz_num_hands += 1;
@@ -49,7 +49,7 @@ test "evAll7" {
     var ctx = BenchmarkCtx{
         .fuzz_num_hands = @as(usize, 0),
         .total_time = @as(u64, 0),
-        .tmr = try std.time.Timer.start(),
+        .timer = try std.time.Timer.start(),
     };
     util.comb7Cb(0, 52, cb, &ctx);
     printBencharkInfo(ctx.total_time, ctx.fuzz_num_hands, 7, "evaluateCards");
@@ -99,12 +99,21 @@ test "fuzz7" {
 
 test "fuzz omaha" {
     var trial: usize = 0;
+    var total_time: u64 = 0;
+    var total_time_c: u64 = 0;
+    var timer = try std.time.Timer.start();
     while (trial < num_trials) : (trial += 1) {
+        timer.reset();
         const hand = try randomCardSample(9, std.heap.c_allocator, 0, 52);
+        total_time += timer.read();
         const rank = evaluateOmahaCards(hand[0], hand[1], hand[2], hand[3], hand[4], hand[5], hand[6], hand[7], hand[8]);
+        timer.reset();
         const c_rank = evo(@intCast(c_int, hand[0].id), @intCast(c_int, hand[1].id), @intCast(c_int, hand[2].id), @intCast(c_int, hand[3].id), @intCast(c_int, hand[4].id), @intCast(c_int, hand[5].id), @intCast(c_int, hand[6].id), @intCast(c_int, hand[7].id), @intCast(c_int, hand[8].id));
+        total_time_c += timer.read();
         testing.expectEqual(rank.value, @intCast(u16, c_rank));
     }
+    printBencharkInfo(total_time, num_trials, 9, "evaluateOmahaCards");
+    printBencharkInfo(total_time_c, num_trials, 9, "c.evaluate_omaha_cards");
 }
 
 test "holdem" {
@@ -397,9 +406,9 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
             var h = Card.cardsFromIds(len, &ids);
             var h2 = randomCardSample(len, allocator, 0, 36) catch @panic("error in randomCardSample");
 
-            ctx.tmr.reset();
+            ctx.timer.reset();
             const sdrank = evfn(&h);
-            ctx.total_time += ctx.tmr.read();
+            ctx.total_time += ctx.timer.read();
             const sdrank2 = evfn(&h2);
             ctx.fuzz_num_hands += 1;
 
@@ -462,7 +471,7 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
     var ctx = BenchmarkCtx{
         .fuzz_num_hands = @as(usize, 0),
         .total_time = @as(u64, 0),
-        .tmr = try std.time.Timer.start(),
+        .timer = try std.time.Timer.start(),
     };
     combFn(0, 36, cb, &ctx);
     printBencharkInfo(ctx.total_time, ctx.fuzz_num_hands, len, ev_fn_name);
@@ -506,25 +515,40 @@ test "razz ev5" {
     }
 }
 
-fn razzFuzzTest(comptime len: u8, ev_fn_name: []const u8) !void {
+fn razzFuzzTest(comptime len: u8, ev_fn_name: []const u8, cb: var) !void {
     const evfn = evaluateCardsRazz;
     const expected_evfn = evaluateCards;
     const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
     const allocator = std.heap.page_allocator;
+
+    var ctx = BenchmarkCtx{
+        .fuzz_num_hands = @as(usize, 0),
+        .total_time = @as(u64, 0),
+        .timer = try std.time.Timer.start(),
+    };
+    combFn(0, 52, cb, &ctx);
+    printBencharkInfo(ctx.total_time, ctx.fuzz_num_hands, len, ev_fn_name);
+}
+
+test "fuzz razz 5" {
+    const len = 5;
+    const evfn = evaluateCardsRazz;
+    const expected_evfn = evaluateCards;
+    const allocator = std.heap.page_allocator;
     const cb = struct {
         fn func(ids: [len]u6, ctx: var) void {
-            // if (fuzz_num_hands == 1000) break;
+            // if (ctx.fuzz_num_hands == num_trials) return;
             var h = Card.cardsFromIds(len, &ids);
-            var h2 = randomCardSample(len, allocator, 0, 52) catch @panic("error in randomCardSample");
+            var h2 = randomCardSample(len, allocator, 0, 36) catch @panic("error in randomCardSample");
 
-            ctx.tmr.reset();
+            ctx.timer.reset();
             const rzrank = evfn(&h);
-            ctx.total_time += ctx.tmr.read();
-            const rzrank2 = evfn(&h2);
+            ctx.total_time += ctx.timer.read();
             ctx.fuzz_num_hands += 1;
+            const rzrank2 = evfn(&h);
 
-            var rank = expected_evfn(&Card.cardsToAlo(5, &h), 13);
-            var rank2 = expected_evfn(&Card.cardsToAlo(5, &h2), 13);
+            var rank = expected_evfn(&Card.cardsToAlo(len, &h), 13);
+            var rank2 = expected_evfn(&Card.cardsToAlo(len, &h2), 13);
             // skip straights and flushes
             const ignore_categories = &[_]Rank.Category{ .straight_flush, .flush, .straight };
             if (std.mem.indexOfScalar(Rank.Category, ignore_categories, rank.category()) != null) return;
@@ -543,20 +567,44 @@ fn razzFuzzTest(comptime len: u8, ev_fn_name: []const u8) !void {
         }
     }.func;
 
-    var ctx = BenchmarkCtx{
-        .fuzz_num_hands = @as(usize, 0),
-        .total_time = @as(u64, 0),
-        .tmr = try std.time.Timer.start(),
-    };
-    combFn(0, 52, cb, &ctx);
-    printBencharkInfo(ctx.total_time, ctx.fuzz_num_hands, len, ev_fn_name);
+    try razzFuzzTest(5, "evaluateCardsRazz", cb);
 }
 
-test "fuzz razz 5" {
-    try razzFuzzTest(5, "evaluateCardsRazz");
+test "fuzz razz 7" {
+    const len = 7;
+    const evfn = evaluateCardsRazz;
+    const cb = struct {
+        fn func(ids: [len]u6, ctx: var) void {
+            if (ctx.fuzz_num_hands == num_trials) return;
+            var h = Card.cardsFromIds(len, &ids);
+
+            ctx.timer.reset();
+            const rzrank = evfn(&h);
+            ctx.total_time += ctx.timer.read();
+            ctx.fuzz_num_hands += 1;
+
+            const ContextInner = struct {
+                best: u16,
+                ids: [len]u6,
+            };
+            var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
+            const cb_inner = struct {
+                fn func(indices: [5]u6, ctx2: var) void {
+                    var ranks: [5]u6 = undefined;
+                    for (indices) |idx, i| ranks[i] = ctx2.ids[idx];
+                    const rank = evaluateCardsRazz(&Card.cardsFromIds(5, &ranks));
+                    ctx2.best = std.math.min(ctx2.best, rank.value);
+                }
+            }.func;
+            util.comb5Cb(0, len, cb_inner, &ctx_inner);
+            testing.expectEqual(rzrank.value, ctx_inner.best);
+        }
+    }.func;
+
+    try razzFuzzTest(7, "evaluateCardsRazz", cb);
 }
 
-pub const io_mode = .evented;
-pub fn main() !void {
-    try razzFuzzTest(5, "evaluateCardsRazz");
-}
+// pub const io_mode = .evented;
+// pub fn main() !void {
+//     try razzFuzzTest(5, "evaluateCardsRazz", cb);
+// }

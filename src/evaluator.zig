@@ -18,10 +18,10 @@ extern const flush_sd5: [512]u16;
 extern const noflush_sd5: [1278]u16;
 extern const flush_sd7: [512]u16;
 extern const noflush_sd7: [6030]u16;
-// extern const razz_hashtable: [49205]u16;
-// const razz_hashtable: [49205]u16 = @import("razz_hashtable.zig").razz_hash_lookup;
 extern const razz_hashtable5: [6175]u16;
 // const razz_hashtable5: [6175]u16 = @import("razz_hashtable5.zig").razz_lookup5;
+extern const razz_hashtable7: [49205]u16;
+// const razz_hashtable7: [49205]u16 = @import("razz_hashtable7.zig").razz_lookup7;
 
 pub const binaries_by_id = [_]u16{
     0x1,    0x1,    0x1,    0x1,
@@ -180,12 +180,12 @@ pub fn hashQuinary(q: []const u6, comptime len: u8, k_: u8) u32 {
     return sum;
 }
 
-pub fn hashBinary(binary: u16, len: u8, k_: u8) u32 {
+pub fn hashBinary(binary: u16, comptime len: u8, k_: u8) u32 {
     var sum: u32 = 0;
-    var i: u4 = 0;
+    comptime var i: u4 = 0;
     var k = k_;
 
-    while (i < len) : (i += 1) {
+    inline while (i < len) : (i += 1) {
         if (binary & (@as(u15, 1) << i) != 0) {
             if (len - i - 1 >= k)
                 sum += choose[len - i - 1][k];
@@ -224,8 +224,8 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
     suit_count_hole[h3.id & 0x3] += 1;
     suit_count_hole[h4.id & 0x3] += 1;
 
-    var i: u8 = 0;
-    while (i < 4) : (i += 1) {
+    comptime var i: u8 = 0;
+    inline while (i < 4) : (i += 1) {
         if (suit_count_board[i] >= 3 and suit_count_hole[i] >= 2) {
             var suit_binary_board = [1]u16{0} ** 4;
 
@@ -278,9 +278,7 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
 
     value_noflush = noflush_omaha[board_hash * 1820 + hole_hash];
 
-    return Rank{
-        .value = if (value_flush < value_noflush) value_flush else value_noflush,
-    };
+    return Rank.init(std.math.min(value_flush, value_noflush));
 }
 
 // EvSD5 Card id, ranged from 0 to 35.
@@ -374,22 +372,6 @@ pub fn cardsToBinary(cards: []const Card) u16 {
     return result;
 }
 
-pub fn evaluate5CardsRazz2(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
-    var quinary = [1]u6{0} ** 13;
-    const cards = Card.cardsToAlo(5, &[_]Card{ a, b, c, d, e });
-    // inline for ()) |card|
-    //     quinary[card.id >> 2] += 1;
-    quinary[cards[0].id >> 2] += 1;
-    quinary[cards[1].id >> 2] += 1;
-    quinary[cards[2].id >> 2] += 1;
-    quinary[cards[3].id >> 2] += 1;
-    quinary[cards[4].id >> 2] += 1;
-    const hash = hashQuinary(&quinary, 13, 5);
-    // warn("hash {} razz_hashtable5[hash] {}\n", .{ hash, razz_hashtable5[hash] });
-
-    return Rank.init(razz_hashtable5[hash]);
-}
-
 pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     var quinary = [1]u6{0} ** 13;
     quinary[Card.rankToAlo(a.id >> 2)] += 1;
@@ -403,13 +385,14 @@ pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     return Rank.init(razz_hashtable5[hash]);
 }
 
+// TODO: replace with Vector(5, u6) once https://github.com/ziglang/zig/issues/3246 is resolved
+const u8x5 = std.meta.Vector(5, u8);
 pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
-    var quinary = [1]u6{0} ** 13;
-    const u6x5 = std.meta.Vector(5, u6);
-    var ranks = u6x5{ a.id, b.id, c.id, d.id, e.id };
+    var ranks = u8x5{ a.id, b.id, c.id, d.id, e.id };
     ranks >>= @splat(5, @as(u3, 2));
-    ranks = (ranks + @splat(5, @as(u6, 1))) % @splat(5, @as(u6, 13));
-
+    ranks += @splat(5, @as(u8, 1));
+    ranks %= @splat(5, @as(u8, 13));
+    var quinary = [1]u6{0} ** 13;
     comptime var i: u8 = 0;
     inline while (i < 5) : (i += 1) quinary[ranks[i]] += 1;
     const hash = hashQuinary(&quinary, 13, 5);
@@ -418,16 +401,31 @@ pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     return Rank.init(razz_hashtable5[hash]);
 }
 
-// evaluate the given 5 card hand and return a score from 0..5082
+// evaluate the given 5 card hand and return a score from 0..6175
 pub fn evaluateCardsRazz(cards: []const Card) Rank {
-    // std.debug.assert(cards.len == 5);
-    // const alo_cards = Card.cardsToAlo(5, cards);
-    // for (alo_cards) |c| warn("alo c {}\n", .{c});
     return switch (cards.len) {
         5 => evaluate5CardsRazzVec(cards[0], cards[1], cards[2], cards[3], cards[4]),
+        7 => evaluate7CardsRazzVec(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6]),
         else => std.debug.panic("invalid cards length: {}", .{cards.len}),
     };
 }
+
+// TODO: replace with Vector(7, u6) once https://github.com/ziglang/zig/issues/3246 is resolved
+const u8x7 = std.meta.Vector(7, u8);
+pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
+    var ranks = u8x7{ a.id, b.id, c.id, d.id, e.id, f.id, g.id };
+    ranks >>= @splat(7, @as(u3, 2));
+    ranks += @splat(7, @as(u8, 1));
+    ranks %= @splat(7, @as(u8, 13));
+    var quinary = [1]u6{0} ** 13;
+    comptime var i: u8 = 0;
+    inline while (i < 7) : (i += 1) quinary[ranks[i]] += 1;
+    const hash = hashQuinary(&quinary, 13, 7);
+    // warn("hash {} razz_hashtable7[hash] {}\n", .{ hash, razz_hashtable7[hash] });
+
+    return Rank.init(razz_hashtable7[hash]);
+}
+
 // evaluate the given 7 card hand and return a score from 0..5082
 // pub fn evaluate7Razz(cards: []const Card) Rank {
 //     std.debug.assert(cards.len == 7);
