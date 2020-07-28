@@ -8,7 +8,7 @@ const sd5 = @import("hashtable_sd5.zig");
 const sd7 = @import("hashtable_sd7.zig");
 const dpt = @import("dptables.zig");
 const razz5 = @import("razz_hashtable5.zig");
-// const razz = @import("razz_hashtable.zig");
+const razz7 = @import("razz_hashtable7.zig");
 
 export const flush = ht.flush;
 export const noflush5 = ht5.noflush5;
@@ -21,3 +21,4 @@ export const noflush_sd5 = sd5.nonflushes;
 export const flush_sd7 = sd7.flushes;
 export const noflush_sd7 = sd7.nonflushes;
 export const razz_hashtable5 = razz5.razz_lookup5;
+export const razz_hashtable7 = razz7.razz_lookup7;

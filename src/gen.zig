@@ -324,8 +324,9 @@ test "razzBuild5" {
         fourkind_hands_map.deinit();
     }
     while (chan.get()) |ids| {
-        const cards = Card.cardsFromIds(5, &ids);
+        const cards = Card.cardsFromIds(len, &ids);
         var rank = ev.evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], 13);
+        // var rank = ev.evaluateCards(cards, 13);
         const category = rank.category();
         const map_to_use = switch (category) {
             .straight_flush, .flush, .straight, .high_card => &non_paired_hands_map,
@@ -413,4 +414,70 @@ fn x(hand: var, i: usize, hands_list: var, hand_rank: usize) void {
             testing.expect(expected);
         }
     }
+}
+
+// zig test src/gen.zig --test-filter razzBuild7 -ltables -Lzig-cache/lib -Drelease-fast > src/razz_hashtable7.zig
+test "razzBuild7" {
+    const len = 7;
+    var fuzz_num_hands: usize = 0;
+    const max_num_hands = 300;
+    // var ranks = [1]RankInfo{.{}} ** 6175;
+    var ranks = [1]u16{0} ** 49205;
+    const hashtable_razz5 = @import("razz_hashtable5.zig");
+
+    const ContextInner = struct {
+        best: u16,
+        ids: [7]u6,
+    };
+    const cb_inner = struct {
+        fn func(indices: [5]u6, ctx: var) void {
+            var ids: [5]u6 = undefined;
+            for (indices) |idx, i| ids[i] = ctx.ids[idx];
+            const rank = ev.evaluateCardsRazz(&Card.cardsFromIds(5, &ids));
+            ctx.best = std.math.min(ctx.best, rank.value);
+        }
+    }.func;
+
+    const Context = struct {
+        ranks: @TypeOf(ranks),
+        // max: u32,
+    };
+    const cb = struct {
+        fn func(ids: [7]u6, ctx: var) void {
+            var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
+            util.comb5Cb(0, 7, cb_inner, &ctx_inner);
+            var quinary = [1]u6{0} ** 13;
+            for (ids) |id|
+                quinary[Card.rankToAlo(id >> 2)] += 1;
+            const hash = ev.hashQuinary(&quinary, 13, 7);
+
+            // warn("hash {} best {}\n", .{ hash, ctx_inner.best });
+            ctx.ranks[hash] = ctx_inner.best;
+            // ctx.max = std.math.max(ctx.max, hash);
+        }
+    }.func;
+    var ctx = Context{
+        .ranks = ranks,
+        // .max = 0,
+    };
+
+    util.comb7Cb(0, 52, cb, &ctx);
+
+    // warn("max {}\n", .{ctx.max});
+    const items_per_line = 10;
+    output("pub const razz_lookup7 = [_]u16 {{\n", .{});
+    var i: usize = 0;
+    while (i < ctx.ranks.len) : (i += 1) {
+        if (output_comments) {
+            output("{}, // {}\n", .{ctx.ranks[i]});
+        } else {
+            var j: usize = i;
+            while (j < std.math.min(i + items_per_line, ctx.ranks.len)) : (j += 1) {
+                output("{}, ", .{ctx.ranks[j]});
+            }
+            output("\n", .{});
+            i = j - 1;
+        }
+    }
+    output("}};\n", .{});
 }
