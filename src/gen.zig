@@ -13,7 +13,7 @@ extern const suits: [4609]u8;
 pub extern const noflush_omaha: [11238500]u16;
 pub extern const flush_omaha: [4099095]u16;
 
-fn output(comptime fmt: []const u8, args: var) void {
+fn output(comptime fmt: []const u8, args: anytype) void {
     const stdout = std.io.getStdOut();
     _ = stdout.outStream().print(fmt, args) catch unreachable;
 }
@@ -182,7 +182,7 @@ test "gensd7" {
     if (log_counts) warnLogCounts(category_counts, category_counts_distinct, category_rank_boundaries);
 }
 
-fn outputTables(flushes_sd: [512]u16, nonflushes_sd: var, output_comments_: bool) void {
+fn outputTables(flushes_sd: [512]u16, nonflushes_sd: anytype, output_comments_: bool) void {
     const items_per_line = 10;
     output("pub const flushes = [_]u16{{\n", .{});
     var i: usize = 0;
@@ -397,7 +397,7 @@ test "razzBuild5" {
     output("}};\n", .{});
 }
 
-fn x(hand: var, i: usize, hands_list: var, hand_rank: usize) void {
+fn x(hand: anytype, i: usize, hands_list: anytype, hand_rank: usize) void {
     var flush_hand = [1]u8{'c'} ** 10;
     for (hand) |c, j| flush_hand[j * 2] = c;
     if (i == 0) {
@@ -430,7 +430,7 @@ test "razzBuild7" {
         ids: [7]u6,
     };
     const cb_inner = struct {
-        fn func(indices: [5]u6, ctx: var) void {
+        fn func(indices: [5]u6, ctx: anytype) void {
             var ids: [5]u6 = undefined;
             for (indices) |idx, i| ids[i] = ctx.ids[idx];
             const rank = ev.evaluateCardsRazz(&Card.cardsFromIds(5, &ids));
@@ -443,7 +443,7 @@ test "razzBuild7" {
         // max: u32,
     };
     const cb = struct {
-        fn func(ids: [7]u6, ctx: var) void {
+        fn func(ids: [7]u6, ctx: anytype) void {
             var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
             util.comb5Cb(0, 7, cb_inner, &ctx_inner);
             var quinary = [1]u6{0} ** 13;

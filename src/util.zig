@@ -93,7 +93,8 @@ test "sanity" {
     std.testing.expectEqual(i, combs75.len);
 }
 
-pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: var) void, ctx: var) void {
+// cb return true to continue, false to halt
+pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: anytype) bool, ctx: anytype) void {
     var a: u6 = lo;
     while (a < hi - 4) : (a += 1) {
         var b: u6 = a + 1;
@@ -112,7 +113,7 @@ pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: var) void, ctx: var)
     }
 }
 
-pub fn comb7Cb(lo: u6, hi: u6, comptime cb: fn ([7]u6, ctx: var) void, ctx: var) void {
+pub fn comb7Cb(lo: u6, hi: u6, comptime cb: fn ([7]u6, ctx: anytype) bool, ctx: anytype) void {
     var y: u6 = lo;
     while (y < hi - 6) : (y += 1) {
         var z: u6 = y + 1;
