@@ -34,7 +34,7 @@ pub fn build(b: *Builder) void {
     main_tests.addIncludeDir("src/PokerHandEvaluator/cpp/src/");
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/evaluator_omaha.c", &[_][]const u8{});
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/hash.c", &[_][]const u8{});
-    main_tests.setFilter("validate");
+    // main_tests.setFilter("validate");
     main_tests.setOutputDir("./zig-cache/test_bin");
     // main_tests.install();
     const test_step = b.step("test", "Run library tests");

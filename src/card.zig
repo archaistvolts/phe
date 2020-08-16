@@ -150,7 +150,7 @@ test "round trip ids to string" {
     const util = @import("util.zig");
 
     const cb = struct {
-        fn func(ids: [5]u6, ctx: anytype) bool {
+        fn func(ids: [5]u6, ctx: anytype) !bool {
             var cards = cardsFromIds(5, &ids);
             var buf: [10]u8 = undefined;
             const hand = cardsToString(cards[0..5], &buf);
@@ -164,7 +164,7 @@ test "round trip ids to string" {
             return true;
         }
     }.func;
-    util.comb5Cb(0, 13, cb, {});
+    try util.comb5Cb(0, 13, cb, {});
 }
 
 /// 'A' => '2', 'Q' => 'K'

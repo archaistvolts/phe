@@ -37,7 +37,7 @@ fn printBencharkInfo(total_time: anytype, hand_idx: usize, len: usize, ev_fn_nam
 // compare against c version
 test "validate 5" {
     const cb = struct {
-        fn func(ids: [5]u6, ctx: anytype) bool {
+        fn func(ids: [5]u6, ctx: anytype) !bool {
             const cards = Card.cardsFromIds(5, &ids);
             const actual = evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], 13);
             const expected = ev5.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
@@ -45,12 +45,12 @@ test "validate 5" {
             return true;
         }
     }.func;
-    util.comb5Cb(0, 52, cb, {});
+    try util.comb5Cb(0, 52, cb, {});
 }
 
 test "validate 7" {
     const cb = struct {
-        fn func(ids: [7]u6, ctx: anytype) bool {
+        fn func(ids: [7]u6, ctx: anytype) !bool {
             // const actual = wrap7(evaluate7Cards, 13)(Card.cardsFromIds(7, &ids));
             const cards = Card.cardsFromIds(7, &ids);
             const actual = evaluate7Cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], 13);
@@ -59,7 +59,7 @@ test "validate 7" {
             return true;
         }
     }.func;
-    util.comb7Cb(0, 52, cb, {});
+    try util.comb7Cb(0, 52, cb, {});
 }
 
 const benchmark_num_trials = 10_000;
@@ -452,18 +452,13 @@ fn printDebugInfo(comptime ev_name: []const u8, len: usize, h: []Card, h2: []Car
 /// so these are validated differently.
 fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
     const cb = struct {
-        fn func(ids: [len]u6, ctx: anytype) bool {
+        fn func(ids: [len]u6, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
             var h2 = randomCardSample(len, ctx.map, &ctx.rand, 0, 36) catch @panic("error in randomCardSample");
-            // ctx.timer.reset();
 
             const sdrank = if (len == 5) evaluate5Shortdeck(h[0], h[1], h[2], h[3], h[4]) else evaluate7Shortdeck(h[0], h[1], h[2], h[3], h[4], h[5], h[6]);
-            // ctx.total_time += ctx.timer.read();
             const sdrank2 = if (len == 5) evaluate5Shortdeck(h2[0], h2[1], h2[2], h2[3], h2[4]) else evaluate7Shortdeck(h2[0], h2[1], h2[2], h2[3], h2[4], h2[5], h2[6]);
-            // ctx.hand_idx += 1;
 
-            // const rank = expected_evfn(&h, 13);
-            // const rank2 = expected_evfn(&h2, 13);
             const rank = if (len == 5) evaluate5Cards(h[0], h[1], h[2], h[3], h[4], 13) else evaluate7Cards(h[0], h[1], h[2], h[3], h[4], h[5], h[6], 13);
             const rank2 = if (len == 5) evaluate5Cards(h2[0], h2[1], h2[2], h2[3], h2[4], 13) else evaluate7Cards(h2[0], h2[1], h2[2], h2[3], h2[4], h2[5], h2[6], 13);
 
@@ -517,7 +512,6 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
                     testing.expect(false);
                 }
             }
-            // return ctx.hand_idx < ctx.max_hand_idx;
             return true;
         }
     }.func;
@@ -526,8 +520,7 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
     ctx.map = &std.AutoHashMap(u6, void).init(std.heap.c_allocator);
     try ctx.map.ensureCapacity(len);
     const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
-    combFn(0, 36, cb, &ctx);
-    // printBencharkInfo(ctx.total_time, ctx.hand_idx, len, ev_fn_name);
+    try combFn(0, 36, cb, &ctx);
 }
 
 test "fuzz shortdeck5" {
@@ -573,18 +566,14 @@ fn razzValidate(comptime len: u8, ev_fn_name: []const u8, cb: anytype) !void {
     const evfn = evaluateCardsRazz;
     const expected_evfn = evaluateCards;
     const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
-    // const allocator = std.heap.page_allocator;
 
     var ctx = try TestCtx.init();
     ctx.map = &std.AutoHashMap(u6, void).init(std.heap.c_allocator);
     try ctx.map.ensureCapacity(len);
-    combFn(0, 52, cb, &ctx);
-    // printBencharkInfo(ctx.total_time, ctx.hand_idx, len, ev_fn_name);
+    try combFn(0, 52, cb, &ctx);
 }
 
-fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
-    return Card.rankToAlo(Card.nameToRank(a)) < Card.rankToAlo(Card.nameToRank(b));
-}
+const lessthan_rank_alo = @import("gen.zig").lessthan_rank_alo;
 
 fn asc_alo_hands(context: void, a: []const u8, b: []const u8) bool {
     for (a) |ae, i| {
@@ -600,7 +589,7 @@ test "validate razz 5" {
     const evfn = evaluateCardsRazz;
     const expected_evfn = evaluateCards;
     const cb = struct {
-        fn func(ids: [len]u6, ctx: anytype) bool {
+        fn func(ids: [len]u6, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
             var h2 = randomCardSample(len, ctx.map, &ctx.rand, 0, 36) catch @panic("error in randomCardSample");
 
@@ -642,42 +631,9 @@ test "validate razz 5" {
 
                 std.testing.expectEqual(h1_less, h1_winner);
                 return true;
+                // skip comparison of strt_flush with non-strt_flush
             } else if (rk1_strt_or_flush or rk2_strt_or_flush)
                 return true;
-            // skip comparison of strt_flush with non-strt_flush
-            // else if ((rk1_strt_or_flush and rk1_cat != .high_card) or (rk2_strt_or_flush and rk2_cat != .high_card)) {
-            //     const failMessage = struct {
-            //         fn func(_h: [len]Card, _h2: [len]Card, rzrk: Rank, rzrk2: Rank, rk: Rank, rk2: Rank, lt: bool) void {
-            //             var buf: [len * 2]u8 = undefined;
-            //             const hand1 = Card.cardsToString(&_h, &buf);
-            //             var buf2: [len * 2]u8 = undefined;
-            //             const hand2 = Card.cardsToString(&_h2, &buf2);
-            //             warn("expected rzrank:{} {} rzrank2:{} h {}({}) h2 {}({})\n", .{
-            //                 rzrk.value,
-            //                 if (lt) "<" else ">",
-            //                 rzrk2.value,
-            //                 hand1,
-            //                 rk.category(),
-            //                 hand2,
-            //                 rk2.category(),
-            //             });
-            //         }
-            //     }.func;
-            //     if (rk1_strt_or_flush) {
-            //         const expected = rzrank.value < rzrank2.value;
-            //         if (!expected) failMessage(h, h2, rzrank, rzrank2, rank, rank2, true);
-            //         testing.expect(expected);
-            //     } else {
-            //         const expected = rzrank.value > rzrank2.value;
-            //         if (!expected) failMessage(h, h2, rzrank, rzrank2, rank, rank2, false);
-            //         testing.expect(expected);
-            //     }
-            //     return true;
-            // }
-
-            // const cat = rank.category();
-            // const cat2 = rank2.category();
-            // if (rk1_cat != rk2_cat2) return true;
 
             const both_lte = rzrank.value >= rzrank2.value and rank.value <= rank2.value;
             const both_gte = rzrank.value <= rzrank2.value and rank.value >= rank2.value;
@@ -697,7 +653,7 @@ test "validate razz 7" {
     const len = 7;
     const evfn = evaluateCardsRazz;
     const cb = struct {
-        fn func(ids: [len]u6, ctx: anytype) bool {
+        fn func(ids: [len]u6, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
 
             const rzrank = evfn(&h);
@@ -709,7 +665,7 @@ test "validate razz 7" {
             };
             var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
             const cb_inner = struct {
-                fn func(indices: [5]u6, ctx2: anytype) bool {
+                fn func(indices: [5]u6, ctx2: anytype) !bool {
                     var ranks: [5]u6 = undefined;
                     for (indices) |idx, i| ranks[i] = ctx2.ids[idx];
                     const rank = evaluateCardsRazz(&Card.cardsFromIds(5, &ranks));
@@ -717,7 +673,7 @@ test "validate razz 7" {
                     return true;
                 }
             }.func;
-            util.comb5Cb(0, len, cb_inner, &ctx_inner);
+            try util.comb5Cb(0, len, cb_inner, &ctx_inner);
             testing.expectEqual(rzrank.value, ctx_inner.best);
             return ctx.hand_idx < ctx.max_hand_idx;
         }

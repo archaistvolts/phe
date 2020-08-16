@@ -1,50 +1,50 @@
 const std = @import("std");
 
-pub fn comb5(lo: u6, hi: u6, ch: *std.event.Channel(?[5]u6)) void {
-    var a: u6 = lo;
-    while (a < hi - 4) : (a += 1) {
-        var b: u6 = a + 1;
-        while (b < hi - 3) : (b += 1) {
-            var c: u6 = b + 1;
-            while (c < hi - 2) : (c += 1) {
-                var d: u6 = c + 1;
-                while (d < hi - 1) : (d += 1) {
-                    var e: u6 = d + 1;
-                    while (e < hi) : (e += 1) {
-                        ch.put([5]u6{ a, b, c, d, e });
-                    }
-                }
-            }
-        }
-    }
-    ch.put(null);
-}
+// pub fn comb5(lo: u6, hi: u6, ch: *std.event.Channel(?[5]u6)) void {
+//     var a: u6 = lo;
+//     while (a < hi - 4) : (a += 1) {
+//         var b: u6 = a + 1;
+//         while (b < hi - 3) : (b += 1) {
+//             var c: u6 = b + 1;
+//             while (c < hi - 2) : (c += 1) {
+//                 var d: u6 = c + 1;
+//                 while (d < hi - 1) : (d += 1) {
+//                     var e: u6 = d + 1;
+//                     while (e < hi) : (e += 1) {
+//                         ch.put([5]u6{ a, b, c, d, e });
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     ch.put(null);
+// }
 
-pub fn comb7(lo: u6, hi: u6, ch: *std.event.Channel(?[7]u6)) void {
-    var y: u6 = lo;
-    while (y < hi - 6) : (y += 1) {
-        var z: u6 = y + 1;
-        while (z < hi - 5) : (z += 1) {
-            var a: u6 = z + 1;
-            while (a < hi - 4) : (a += 1) {
-                var b: u6 = a + 1;
-                while (b < hi - 3) : (b += 1) {
-                    var c: u6 = b + 1;
-                    while (c < hi - 2) : (c += 1) {
-                        var d: u6 = c + 1;
-                        while (d < hi - 1) : (d += 1) {
-                            var e: u6 = d + 1;
-                            while (e < hi) : (e += 1) {
-                                ch.put([7]u6{ y, z, a, b, c, d, e });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    ch.put(null);
-}
+// pub fn comb7(lo: u6, hi: u6, ch: *std.event.Channel(?[7]u6)) void {
+//     var y: u6 = lo;
+//     while (y < hi - 6) : (y += 1) {
+//         var z: u6 = y + 1;
+//         while (z < hi - 5) : (z += 1) {
+//             var a: u6 = z + 1;
+//             while (a < hi - 4) : (a += 1) {
+//                 var b: u6 = a + 1;
+//                 while (b < hi - 3) : (b += 1) {
+//                     var c: u6 = b + 1;
+//                     while (c < hi - 2) : (c += 1) {
+//                         var d: u6 = c + 1;
+//                         while (d < hi - 1) : (d += 1) {
+//                             var e: u6 = d + 1;
+//                             while (e < hi) : (e += 1) {
+//                                 ch.put([7]u6{ y, z, a, b, c, d, e });
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     ch.put(null);
+// }
 
 // test "sanity" {
 //     var ch: std.event.Channel(?[5]u6) = undefined;
@@ -94,7 +94,7 @@ pub fn comb7(lo: u6, hi: u6, ch: *std.event.Channel(?[7]u6)) void {
 // }
 
 // cb return true to continue, false to halt
-pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: anytype) bool, ctx: anytype) void {
+pub fn comb5Cb(lo: u6, hi: u6, comptime cb: anytype, ctx: anytype) !void {
     var a: u6 = lo;
     while (a < hi - 4) : (a += 1) {
         var b: u6 = a + 1;
@@ -105,7 +105,7 @@ pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: anytype) bool, ctx: 
                 while (d < hi - 1) : (d += 1) {
                     var e: u6 = d + 1;
                     while (e < hi) : (e += 1) {
-                        if (!cb([5]u6{ a, b, c, d, e }, ctx)) return;
+                        if (!try cb([5]u6{ a, b, c, d, e }, ctx)) return;
                     }
                 }
             }
@@ -113,7 +113,7 @@ pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: anytype) bool, ctx: 
     }
 }
 
-pub fn comb7Cb(lo: u6, hi: u6, comptime cb: fn ([7]u6, ctx: anytype) bool, ctx: anytype) void {
+pub fn comb7Cb(lo: u6, hi: u6, comptime cb: anytype, ctx: anytype) !void {
     var y: u6 = lo;
     while (y < hi - 6) : (y += 1) {
         var z: u6 = y + 1;
@@ -128,7 +128,7 @@ pub fn comb7Cb(lo: u6, hi: u6, comptime cb: fn ([7]u6, ctx: anytype) bool, ctx: 
                         while (d < hi - 1) : (d += 1) {
                             var e: u6 = d + 1;
                             while (e < hi) : (e += 1) {
-                                if (!cb([7]u6{ y, z, a, b, c, d, e }, ctx)) return;
+                                if (!try cb([7]u6{ y, z, a, b, c, d, e }, ctx)) return;
                             }
                         }
                     }
