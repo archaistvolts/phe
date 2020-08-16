@@ -148,21 +148,23 @@ const testing = std.testing;
 
 test "round trip ids to string" {
     const util = @import("util.zig");
-    var ch: std.event.Channel(?[5]u6) = undefined;
-    ch.init(&[_]?[5]u6{});
-    _ = async util.comb5(0, 13, &ch);
-    while (ch.get()) |ids| {
-        var cards = cardsFromIds(5, &ids);
-        var buf: [10]u8 = undefined;
-        const hand = cardsToString(cards[0..5], &buf);
-        const cards2 = cardsFromString(5, hand);
-        var buf2: [10]u8 = undefined;
-        const hand2 = cardsToString(cards2[0..5], &buf2);
-        testing.expectEqualSlices(u8, hand, hand2);
-        var ids2: [5]u6 = undefined;
-        for (cards2) |c, i| ids2[i] = c.id;
-        testing.expectEqualSlices(u6, ids[0..], ids2[0..]);
-    }
+
+    const cb = struct {
+        fn func(ids: [5]u6, ctx: anytype) bool {
+            var cards = cardsFromIds(5, &ids);
+            var buf: [10]u8 = undefined;
+            const hand = cardsToString(cards[0..5], &buf);
+            const cards2 = cardsFromString(5, hand);
+            var buf2: [10]u8 = undefined;
+            const hand2 = cardsToString(cards2[0..5], &buf2);
+            testing.expectEqualSlices(u8, hand, hand2);
+            var ids2: [5]u6 = undefined;
+            for (cards2) |c, i| ids2[i] = c.id;
+            testing.expectEqualSlices(u6, ids[0..], ids2[0..]);
+            return true;
+        }
+    }.func;
+    util.comb5Cb(0, 13, cb, {});
 }
 
 /// 'A' => '2', 'Q' => 'K'

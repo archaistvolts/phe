@@ -579,15 +579,18 @@ fn razzValidate(comptime len: u8, ev_fn_name: []const u8, cb: anytype) !void {
     ctx.map = &std.AutoHashMap(u6, void).init(std.heap.c_allocator);
     try ctx.map.ensureCapacity(len);
     combFn(0, 52, cb, &ctx);
-    printBencharkInfo(ctx.total_time, ctx.hand_idx, len, ev_fn_name);
+    // printBencharkInfo(ctx.total_time, ctx.hand_idx, len, ev_fn_name);
 }
 
-const gen = @import("gen.zig");
-pub fn asc_alo_hands(context: void, a: []const u8, b: []const u8) bool {
+fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
+    return Card.rankToAlo(Card.nameToRank(a)) < Card.rankToAlo(Card.nameToRank(b));
+}
+
+fn asc_alo_hands(context: void, a: []const u8, b: []const u8) bool {
     for (a) |ae, i| {
         const be = b[i];
         if (ae == be) continue;
-        return gen.lessthan_rank_alo({}, ae, be);
+        return lessthan_rank_alo({}, ae, be);
     }
     return false;
 }
@@ -619,12 +622,12 @@ test "validate razz 5" {
                 var buf: [len * 2]u8 = undefined;
                 const hand1 = Card.cardsToString(&h, &buf);
                 var rank_names1 = [_]u8{ hand1[0], hand1[2], hand1[4], hand1[6], hand1[8] };
-                std.sort.sort(u8, &rank_names1, {}, gen.lessthan_rank_alo);
+                std.sort.sort(u8, &rank_names1, {}, lessthan_rank_alo);
                 std.mem.reverse(u8, &rank_names1);
                 var buf2: [len * 2]u8 = undefined;
                 const hand2 = Card.cardsToString(&h2, &buf2);
                 var rank_names2 = [_]u8{ hand2[0], hand2[2], hand2[4], hand2[6], hand2[8] };
-                std.sort.sort(u8, &rank_names2, {}, gen.lessthan_rank_alo);
+                std.sort.sort(u8, &rank_names2, {}, lessthan_rank_alo);
                 std.mem.reverse(u8, &rank_names2);
                 const h1_less = asc_alo_hands({}, &rank_names1, &rank_names2);
                 if (h1_less != h1_winner)
