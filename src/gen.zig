@@ -293,7 +293,7 @@ pub fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
     return Card.rankToAlo(Card.nameToRank(a)) < Card.rankToAlo(Card.nameToRank(b));
 }
 
-// zig test src/gen.zig --test-filter razzBuild5 -lc --test-evented-io -ltables -Lzig-cache/lib -Drelease-fast > src/razz_hashtable5.zig && zig build test
+// zig test src/gen.zig --test-filter razzBuild5 -lc --test-evented-io -ltables -Lzig-cache/lib -Drelease-fast > src/hashtable_razz5.zig && zig build test
 // create a sorted list of all razz hands
 // keep a separate set for each paired hand class
 // paired hand classes can be ordered by standard poker alo ev rank
@@ -416,14 +416,14 @@ fn x(hand: anytype, i: usize, hands_list: anytype, hand_rank: usize) void {
     }
 }
 
-// zig test src/gen.zig --test-filter razzBuild7 -ltables -Lzig-cache/lib -Drelease-fast > src/razz_hashtable7.zig
+// zig test src/gen.zig --test-filter razzBuild7 -ltables -Lzig-cache/lib -Drelease-fast > src/hashtable_razz7.zig
 test "razzBuild7" {
     const len = 7;
     var fuzz_num_hands: usize = 0;
     const max_num_hands = 300;
     // var ranks = [1]RankInfo{.{}} ** 6175;
     var ranks = [1]u16{0} ** 49205;
-    const hashtable_razz5 = @import("razz_hashtable5.zig");
+    const hashtable_razz5 = @import("hashtable_razz5.zig");
 
     const ContextInner = struct {
         best: u16,

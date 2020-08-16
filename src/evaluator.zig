@@ -18,10 +18,10 @@ extern const flush_sd5: [512]u16;
 extern const noflush_sd5: [1278]u16;
 extern const flush_sd7: [512]u16;
 extern const noflush_sd7: [6030]u16;
-extern const razz_hashtable5: [6175]u16;
-// const razz_hashtable5: [6175]u16 = @import("razz_hashtable5.zig").razz_lookup5;
-extern const razz_hashtable7: [49205]u16;
-// const razz_hashtable7: [49205]u16 = @import("razz_hashtable7.zig").razz_lookup7;
+extern const hashtable_razz5: [6175]u16;
+// const hashtable_razz5: [6175]u16 = @import("hashtable_razz5.zig").razz_lookup5;
+extern const hashtable_razz7: [49205]u16;
+// const hashtable_razz7: [49205]u16 = @import("hashtable_razz7.zig").razz_lookup7;
 
 pub const binaries_by_id = [_]u16{
     0x1,    0x1,    0x1,    0x1,
@@ -380,9 +380,9 @@ pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     quinary[Card.rankToAlo(d.id >> 2)] += 1;
     quinary[Card.rankToAlo(e.id >> 2)] += 1;
     const hash = hashQuinary(&quinary, 13, 5);
-    // warn("hash {} razz_hashtable5[hash] {}\n", .{ hash, razz_hashtable5[hash] });
+    // warn("hash {} hashtable_razz5[hash] {}\n", .{ hash, hashtable_razz5[hash] });
 
-    return Rank.init(razz_hashtable5[hash]);
+    return Rank.init(hashtable_razz5[hash]);
 }
 
 // TODO: replace with Vector(5, u6) once https://github.com/ziglang/zig/issues/3246 is resolved
@@ -396,9 +396,9 @@ pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     comptime var i: u8 = 0;
     inline while (i < 5) : (i += 1) quinary[ranks[i]] += 1;
     const hash = hashQuinary(&quinary, 13, 5);
-    // warn("hash {} razz_hashtable5[hash] {}\n", .{ hash, razz_hashtable5[hash] });
+    // warn("hash {} hashtable_razz5[hash] {}\n", .{ hash, hashtable_razz5[hash] });
 
-    return Rank.init(razz_hashtable5[hash]);
+    return Rank.init(hashtable_razz5[hash]);
 }
 
 // evaluate the given 5 card hand and return a score from 0..6175
@@ -421,9 +421,9 @@ pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Car
     comptime var i: u8 = 0;
     inline while (i < 7) : (i += 1) quinary[ranks[i]] += 1;
     const hash = hashQuinary(&quinary, 13, 7);
-    // warn("hash {} razz_hashtable7[hash] {}\n", .{ hash, razz_hashtable7[hash] });
+    // warn("hash {} hashtable_razz7[hash] {}\n", .{ hash, hashtable_razz7[hash] });
 
-    return Rank.init(razz_hashtable7[hash]);
+    return Rank.init(hashtable_razz7[hash]);
 }
 
 // evaluate the given 7 card hand and return a score from 0..5082
@@ -442,5 +442,5 @@ pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Car
 //     const hash = hashQuinary(&quinary, 13, 7);
 //     // warn("hash {}\n", .{hash});
 
-//     return Rank.init(razz_hashtable[hash]);
+//     return Rank.init(hashtable_razz[hash]);
 // }
