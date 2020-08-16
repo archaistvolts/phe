@@ -17,24 +17,24 @@ pub export fn evaluate_5hand_w(hand: *c_void, hand_len: usize) c_short {
 
 pub export fn evaluate_5cards_w(a: u8, b: u8, c: u8, d: u8, e: u8) c_ushort {
     return ev.evaluate5Cards(
-        Card.init(@intCast(u6, a)),
-        Card.init(@intCast(u6, b)),
-        Card.init(@intCast(u6, c)),
-        Card.init(@intCast(u6, d)),
-        Card.init(@intCast(u6, e)),
+        Card.init(a),
+        Card.init(b),
+        Card.init(c),
+        Card.init(d),
+        Card.init(e),
         13,
     ).value;
 }
 
 pub export fn evaluate_7cards_w(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8) c_ushort {
     return ev.evaluate7Cards(
-        Card.init(@intCast(u6, a)),
-        Card.init(@intCast(u6, b)),
-        Card.init(@intCast(u6, c)),
-        Card.init(@intCast(u6, d)),
-        Card.init(@intCast(u6, e)),
-        Card.init(@intCast(u6, f)),
-        Card.init(@intCast(u6, g)),
+        Card.init(a),
+        Card.init(b),
+        Card.init(c),
+        Card.init(d),
+        Card.init(e),
+        Card.init(f),
+        Card.init(g),
         13,
     ).value;
 }

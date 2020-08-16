@@ -1,8 +1,8 @@
-id: u6,
+id: u8,
 
 const std = @import("std");
 const Card = @This();
-pub fn init(id: u6) Card {
+pub fn init(id: u8) Card {
     return .{ .id = id };
 }
 
@@ -26,7 +26,7 @@ pub fn suitToName(c: u2) u8 {
 }
 
 /// '2' => 0, 'A' => 12
-pub fn nameToRank(name: u8) u6 {
+pub fn nameToRank(name: u8) u8 {
     return switch (name) {
         '2' => 0,
         '3' => 1,
@@ -53,7 +53,7 @@ pub fn initFromName(name: []const u8) Card {
     return Card{ .id = rank * 4 + suit };
 }
 
-pub fn nameToRankSd(name: u8) u6 {
+pub fn nameToRankSd(name: u8) u8 {
     return switch (name) {
         '6' => 0,
         '7' => 1,
@@ -70,7 +70,7 @@ pub fn nameToRankSd(name: u8) u6 {
 
 pub fn initFromNameSd(name: []const u8) Card {
     std.debug.assert(name.len == 2);
-    const rank: u6 = nameToRankSd(name[0]);
+    const rank: u8 = nameToRankSd(name[0]);
     const suit = nameToSuit(name[1]);
     return Card{ .id = rank * 4 + suit };
 }
@@ -131,7 +131,7 @@ pub fn cardsFromString(comptime len: u8, string: []const u8) [len]Card {
     return cards;
 }
 
-pub fn cardsFromIds(comptime len: u8, ids: []const u6) [len]Card {
+pub fn cardsFromIds(comptime len: u8, ids: []const u8) [len]Card {
     std.debug.assert(ids.len == len);
     var result: [len]Card = undefined;
     for (result) |*id, i| id.* = init(ids[i]);
@@ -150,7 +150,7 @@ test "round trip ids to string" {
     const util = @import("util.zig");
 
     const cb = struct {
-        fn func(ids: [5]u6, ctx: anytype) !bool {
+        fn func(ids: [5]u8, ctx: anytype) !bool {
             var cards = cardsFromIds(5, &ids);
             var buf: [10]u8 = undefined;
             const hand = cardsToString(cards[0..5], &buf);
@@ -158,9 +158,9 @@ test "round trip ids to string" {
             var buf2: [10]u8 = undefined;
             const hand2 = cardsToString(cards2[0..5], &buf2);
             testing.expectEqualSlices(u8, hand, hand2);
-            var ids2: [5]u6 = undefined;
+            var ids2: [5]u8 = undefined;
             for (cards2) |c, i| ids2[i] = c.id;
-            testing.expectEqualSlices(u6, ids[0..], ids2[0..]);
+            testing.expectEqualSlices(u8, ids[0..], ids2[0..]);
             return true;
         }
     }.func;
@@ -191,8 +191,8 @@ test "toAlo" {
     testing.expectEqual(Card.initFromName("As"), Card.toAlo(Card.initFromName("Ks")));
 }
 
-const invalid_rank = std.math.maxInt(u6);
-pub fn rankToAlo(rank: u6) u6 {
+const invalid_rank = std.math.maxInt(u8);
+pub fn rankToAlo(rank: u8) u8 {
     // std.debug.warn("rankToAlo {}\n", .{rank});
     std.debug.assert(rank < 13);
     return (rank + 1) % 13;

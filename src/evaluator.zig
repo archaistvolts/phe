@@ -109,7 +109,7 @@ pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, comptime num_
         return Rank{ .value = flush[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u6{0} ** 13;
+    var quinary = [1]u8{0} ** 13;
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -148,7 +148,7 @@ pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
         return Rank{ .value = flush[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u6{0} ** 13;
+    var quinary = [1]u8{0} ** 13;
 
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
@@ -163,7 +163,7 @@ pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
     return Rank{ .value = noflush7[hash] };
 }
 
-pub fn hashQuinary(q: []const u6, comptime len: u8, k_: u8) u32 {
+pub fn hashQuinary(q: []const u8, comptime len: u8, k_: u8) u32 {
     var sum: u32 = 0;
     comptime var i: u16 = 0;
     var k = k_;
@@ -259,8 +259,8 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
         }
     }
 
-    var quinary_board = [1]u6{0} ** 13;
-    var quinary_hole = [1]u6{0} ** 13;
+    var quinary_board = [1]u8{0} ** 13;
+    var quinary_hole = [1]u8{0} ** 13;
 
     quinary_board[c1.id >> 2] += 1;
     quinary_board[c2.id >> 2] += 1;
@@ -305,7 +305,7 @@ pub fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
         return Rank{ .value = flush_sd5[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u6{0} ** 9;
+    var quinary = [1]u8{0} ** 9;
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -344,7 +344,7 @@ pub fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, 
         return Rank{ .value = flush_sd7[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u6{0} ** 9;
+    var quinary = [1]u8{0} ** 9;
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -373,7 +373,7 @@ pub fn cardsToBinary(cards: []const Card) u16 {
 }
 
 pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
-    var quinary = [1]u6{0} ** 13;
+    var quinary = [1]u8{0} ** 13;
     quinary[Card.rankToAlo(a.id >> 2)] += 1;
     quinary[Card.rankToAlo(b.id >> 2)] += 1;
     quinary[Card.rankToAlo(c.id >> 2)] += 1;
@@ -385,14 +385,14 @@ pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     return Rank.init(hashtable_razz5[hash]);
 }
 
-// TODO: replace with Vector(5, u6) once https://github.com/ziglang/zig/issues/3246 is resolved
+// TODO: replace with Vector(5, u8) once https://github.com/ziglang/zig/issues/3246 is resolved
 const u8x5 = std.meta.Vector(5, u8);
 pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     var ranks = u8x5{ a.id, b.id, c.id, d.id, e.id };
     ranks >>= @splat(5, @as(u3, 2));
     ranks += @splat(5, @as(u8, 1));
     ranks %= @splat(5, @as(u8, 13));
-    var quinary = [1]u6{0} ** 13;
+    var quinary = [1]u8{0} ** 13;
     comptime var i: u8 = 0;
     inline while (i < 5) : (i += 1) quinary[ranks[i]] += 1;
     const hash = hashQuinary(&quinary, 13, 5);
@@ -410,14 +410,14 @@ pub fn evaluateCardsRazz(cards: []const Card) Rank {
     };
 }
 
-// TODO: replace with Vector(7, u6) once https://github.com/ziglang/zig/issues/3246 is resolved
+// TODO: replace with Vector(7, u8) once https://github.com/ziglang/zig/issues/3246 is resolved
 const u8x7 = std.meta.Vector(7, u8);
 pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
     var ranks = u8x7{ a.id, b.id, c.id, d.id, e.id, f.id, g.id };
     ranks >>= @splat(7, @as(u3, 2));
     ranks += @splat(7, @as(u8, 1));
     ranks %= @splat(7, @as(u8, 13));
-    var quinary = [1]u6{0} ** 13;
+    var quinary = [1]u8{0} ** 13;
     comptime var i: u8 = 0;
     inline while (i < 7) : (i += 1) quinary[ranks[i]] += 1;
     const hash = hashQuinary(&quinary, 13, 7);
@@ -431,7 +431,7 @@ pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Car
 //     std.debug.assert(cards.len == 7);
 //     const alo_cards = Card.cardsToAlo(7, cards);
 //     // for (alo_cards) |c| warn("alo c {}\n", .{c});
-//     var quinary = [1]u6{0} ** 13;
+//     var quinary = [1]u8{0} ** 13;
 //     quinary[alo_cards[0].id >> 2] += 1;
 //     quinary[alo_cards[1].id >> 2] += 1;
 //     quinary[alo_cards[2].id >> 2] += 1;

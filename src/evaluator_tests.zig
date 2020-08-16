@@ -14,7 +14,7 @@ const TestCtx = struct {
     max_hand_idx: usize = std.math.maxInt(usize),
     total_time: u64,
     timer: std.time.Timer,
-    map: *std.AutoHashMap(u6, void) = undefined,
+    map: *std.AutoHashMap(u8, void) = undefined,
     rand: std.rand.DefaultPrng,
     pub fn init() !TestCtx {
         return TestCtx{
@@ -37,7 +37,7 @@ fn printBencharkInfo(total_time: anytype, hand_idx: usize, len: usize, ev_fn_nam
 // compare against c version
 test "validate 5" {
     const cb = struct {
-        fn func(ids: [5]u6, ctx: anytype) !bool {
+        fn func(ids: [5]u8, ctx: anytype) !bool {
             const cards = Card.cardsFromIds(5, &ids);
             const actual = evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], 13);
             const expected = ev5.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
@@ -50,7 +50,7 @@ test "validate 5" {
 
 test "validate 7" {
     const cb = struct {
-        fn func(ids: [7]u6, ctx: anytype) !bool {
+        fn func(ids: [7]u8, ctx: anytype) !bool {
             // const actual = wrap7(evaluate7Cards, 13)(Card.cardsFromIds(7, &ids));
             const cards = Card.cardsFromIds(7, &ids);
             const actual = evaluate7Cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], 13);
@@ -84,7 +84,7 @@ test "benchmark 5 c" {
 fn benchmark(comptime len: usize, evfn: anytype, comptime num_ranks: usize, comptime evfn_name: []const u8) !void {
     // const is_razz = std.mem.indexOf(u8, evfn_name, "Razz") != null;
     var ctx = try TestCtx.init();
-    ctx.map = &std.AutoHashMap(u6, void).init(std.heap.c_allocator);
+    ctx.map = &std.AutoHashMap(u8, void).init(std.heap.c_allocator);
     try ctx.map.ensureCapacity(5);
     while (ctx.hand_idx < benchmark_num_trials * 1000) : (ctx.hand_idx += 1) {
         const cards = try randomCardSample(len, ctx.map, &ctx.rand, 0, num_ranks * 4);
@@ -130,11 +130,11 @@ test "benchmark 7 c" {
 
 const testing = std.testing;
 
-fn randomCardSample(comptime len: u8, map: *std.AutoHashMap(u6, void), rand: *std.rand.DefaultPrng, low: u6, hi: u6) ![len]Card {
+fn randomCardSample(comptime len: u8, map: *std.AutoHashMap(u8, void), rand: *std.rand.DefaultPrng, low: u8, hi: u8) ![len]Card {
     var result: [len]Card = undefined;
     map.clearRetainingCapacity();
     while (map.count() < len) {
-        const i = rand.random.intRangeLessThan(u6, low, hi);
+        const i = rand.random.intRangeLessThan(u8, low, hi);
         _ = map.putAssumeCapacity(i, {});
     }
     var it = map.iterator();
@@ -147,7 +147,7 @@ fn randomCardSample(comptime len: u8, map: *std.AutoHashMap(u6, void), rand: *st
 
 test "validate omaha" {
     var ctx = try TestCtx.init();
-    ctx.map = &std.AutoHashMap(u6, void).init(std.heap.c_allocator);
+    ctx.map = &std.AutoHashMap(u8, void).init(std.heap.c_allocator);
     try ctx.map.ensureCapacity(9);
     while (ctx.hand_idx < benchmark_num_trials) : (ctx.hand_idx += 1) {
         const cards = try randomCardSample(9, ctx.map, &ctx.rand, 0, 52);
@@ -452,7 +452,7 @@ fn printDebugInfo(comptime ev_name: []const u8, len: usize, h: []Card, h2: []Car
 /// so these are validated differently.
 fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
     const cb = struct {
-        fn func(ids: [len]u6, ctx: anytype) !bool {
+        fn func(ids: [len]u8, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
             var h2 = randomCardSample(len, ctx.map, &ctx.rand, 0, 36) catch @panic("error in randomCardSample");
 
@@ -517,7 +517,7 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
     }.func;
 
     var ctx = try TestCtx.init();
-    ctx.map = &std.AutoHashMap(u6, void).init(std.heap.c_allocator);
+    ctx.map = &std.AutoHashMap(u8, void).init(std.heap.c_allocator);
     try ctx.map.ensureCapacity(len);
     const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
     try combFn(0, 36, cb, &ctx);
@@ -568,7 +568,7 @@ fn razzValidate(comptime len: u8, ev_fn_name: []const u8, cb: anytype) !void {
     const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
 
     var ctx = try TestCtx.init();
-    ctx.map = &std.AutoHashMap(u6, void).init(std.heap.c_allocator);
+    ctx.map = &std.AutoHashMap(u8, void).init(std.heap.c_allocator);
     try ctx.map.ensureCapacity(len);
     try combFn(0, 52, cb, &ctx);
 }
@@ -589,7 +589,7 @@ test "validate razz 5" {
     const evfn = evaluateCardsRazz;
     const expected_evfn = evaluateCards;
     const cb = struct {
-        fn func(ids: [len]u6, ctx: anytype) !bool {
+        fn func(ids: [len]u8, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
             var h2 = randomCardSample(len, ctx.map, &ctx.rand, 0, 36) catch @panic("error in randomCardSample");
 
@@ -653,7 +653,7 @@ test "validate razz 7" {
     const len = 7;
     const evfn = evaluateCardsRazz;
     const cb = struct {
-        fn func(ids: [len]u6, ctx: anytype) !bool {
+        fn func(ids: [len]u8, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
 
             const rzrank = evfn(&h);
@@ -661,12 +661,12 @@ test "validate razz 7" {
 
             const ContextInner = struct {
                 best: u16,
-                ids: [len]u6,
+                ids: [len]u8,
             };
             var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
             const cb_inner = struct {
-                fn func(indices: [5]u6, ctx2: anytype) !bool {
-                    var ranks: [5]u6 = undefined;
+                fn func(indices: [5]u8, ctx2: anytype) !bool {
+                    var ranks: [5]u8 = undefined;
                     for (indices) |idx, i| ranks[i] = ctx2.ids[idx];
                     const rank = evaluateCardsRazz(&Card.cardsFromIds(5, &ranks));
                     ctx2.best = std.math.min(ctx2.best, rank.value);

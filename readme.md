@@ -13,7 +13,7 @@
   - [x] just add c source for evaluator_omaha.  other evaluate fns can be cImported
 - [x] razz
   - [x] generate 5 card lookup table 
-  - [w] 5 card tests
+  - [x] 5 card tests
   - [] why so slow?
 
 - evaluator_tests

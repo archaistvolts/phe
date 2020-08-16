@@ -32,7 +32,7 @@ const allocator = std.heap.c_allocator;
 
 // zig test src/gen.zig --test-filter gensd5 -lc -L zig-cache/lib -l tables > src/hashtable_sd5.zig
 test "gensd5" {
-    const T = [5]u6;
+    const T = [5]u8;
     var ctx = .{
         .flushes_sd = std.mem.zeroes([std.math.pow(u16, 2, 9)]u16),
         .nonflushes_sd = std.mem.zeroes([1278]u16),
@@ -50,7 +50,7 @@ test "gensd5" {
     defer if (log_counts) for (ctx.category_counts_distinct) |*ccd| ccd.deinit();
 
     const cb = struct {
-        fn func(ids: [5]u6, ctx_: anytype) !bool {
+        fn func(ids: [5]u8, ctx_: anytype) !bool {
             var cards = Card.cardsFromIds(T.len, &ids);
 
             var buf: [20]u8 = undefined;
@@ -76,7 +76,7 @@ test "gensd5" {
                     ctx_.flushes_sd[bin_sd] = rank.value;
                 },
                 else => {
-                    var quinary = [1]u6{0} ** 9;
+                    var quinary = [1]u8{0} ** 9;
                     for (cards_sd) |c| quinary[c.id >> 2] += 1;
                     const hash = ev.hashQuinary(&quinary, 9, 5);
                     ctx_.nonflushes_sd[hash] = rank.value;
@@ -123,7 +123,7 @@ fn warnLogCounts(category_counts: CategoryCount, category_counts_distinct: Categ
 
 // zig test src/gen.zig --test-filter gensd7 -lc -L zig-cache/lib -l tables > src/hashtable_sd7.zig
 test "gensd7" {
-    const T = [7]u6;
+    const T = [7]u8;
     var ctx = .{
         .flushes_sd = std.mem.zeroes([std.math.pow(u16, 2, 9)]u16),
         .nonflushes_sd = std.mem.zeroes([6030]u16),
@@ -137,7 +137,7 @@ test "gensd7" {
     defer if (log_counts) for (ctx.category_counts_distinct) |*ccd| ccd.deinit();
 
     const cb = struct {
-        fn func(ids: [7]u6, ctx_: anytype) !bool {
+        fn func(ids: [7]u8, ctx_: anytype) !bool {
             var cards = Card.cardsFromIds(T.len, &ids);
 
             var buf: [20]u8 = undefined;
@@ -172,7 +172,7 @@ test "gensd7" {
                     ctx_.flushes_sd[bin_sd] = rank.value;
                 },
                 else => {
-                    var quinary = [1]u6{0} ** 9;
+                    var quinary = [1]u8{0} ** 9;
                     for (cards_sd) |c| quinary[c.id >> 2] += 1;
                     const hash = ev.hashQuinary(&quinary, 9, 7);
                     ctx_.nonflushes_sd[hash] = rank.value;
@@ -252,7 +252,7 @@ test "razzBuildFromExisting" {
         // const alo_cards = Card.cardsToAlo(5, &cards);
         const rank_str = parts.next().?;
         const rank = try std.fmt.parseUnsigned(u16, rank_str, 10);
-        var quinary = [1]u6{0} ** 13;
+        var quinary = [1]u8{0} ** 13;
         for (cards) |card| quinary[card.id >> 2] += 1;
         const hash = ev.hashQuinary(&quinary, 13, 5);
         if (debug)
@@ -329,7 +329,7 @@ test "razzBuild5" {
         ctx.fourkind_hands_map.deinit();
     }
     const cb = struct {
-        fn func(ids: [5]u6, ctx_: anytype) !bool {
+        fn func(ids: [5]u8, ctx_: anytype) !bool {
             const cards = Card.cardsFromIds(len, &ids);
             var rank = ev.evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], 13);
             const category = rank.category();
@@ -379,7 +379,7 @@ test "razzBuild5" {
         for (hands_list.items) |entry, i| {
             // output("{}, // {}\n", .{ hand_rank, entry.key });
             hand_rank += 1;
-            var quinary = [1]u6{0} ** 13;
+            var quinary = [1]u8{0} ** 13;
             for (entry.key) |r|
                 quinary[Card.rankToAlo(Card.nameToRank(r))] += 1;
             const hash = ev.hashQuinary(&quinary, 13, 5);
@@ -418,11 +418,11 @@ test "razzBuild7" {
 
     const ContextInner = struct {
         best: u16,
-        ids: [7]u6,
+        ids: [7]u8,
     };
     const cb_inner = struct {
-        fn func(indices: [5]u6, ctx: anytype) !bool {
-            var ids: [5]u6 = undefined;
+        fn func(indices: [5]u8, ctx: anytype) !bool {
+            var ids: [5]u8 = undefined;
             for (indices) |idx, i| ids[i] = ctx.ids[idx];
             const rank = ev.evaluateCardsRazz(&Card.cardsFromIds(5, &ids));
             ctx.best = std.math.min(ctx.best, rank.value);
@@ -434,10 +434,10 @@ test "razzBuild7" {
         ranks: @TypeOf(ranks),
     };
     const cb = struct {
-        fn func(ids: [7]u6, ctx: anytype) !bool {
+        fn func(ids: [7]u8, ctx: anytype) !bool {
             var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
             try util.comb5Cb(0, 7, cb_inner, &ctx_inner);
-            var quinary = [1]u6{0} ** 13;
+            var quinary = [1]u8{0} ** 13;
             for (ids) |id|
                 quinary[Card.rankToAlo(id >> 2)] += 1;
             const hash = ev.hashQuinary(&quinary, 13, 7);

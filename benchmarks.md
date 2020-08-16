@@ -20,3 +20,29 @@
 - Test [12/15] test "fuzz razz 5"...evaluateCardsRazz-5 cards 23787.4 Khands/s
 
 I have no idea why using the async channel comb functions would slow down the benchmarks. 
+
+## with Card.id as u6
+Test [1/10] test "benchmark 5"...evaluate5Cards-5 cards 54806.2 Khands/s
+Test [2/10] test "benchmark 5 c"...evaluate5CardsC-5 cards 68130.1 Khands/s
+Test [3/10] test "benchmark 7"...evaluate7Cards-7 cards 47714.7 Khands/s
+Test [4/10] test "benchmark 7 c"...evaluate7CardsC-7 cards 64467.9 Khands/s
+Test [5/10] test "benchmark omaha"...evaluateOmahaCards-9 cards 17181.3 Khands/s
+Test [6/10] test "benchmark omaha c"...evaluateOmahaCards-9 cards 18783.2 Khands/s
+Test [7/10] test "benchmark shortdeck 5"...evaluateShortdeck5-5 cards 63859.3 Khands/s
+Test [8/10] test "benchmark shortdeck 7"...evaluateShortdeck7-7 cards 60067.6 Khands/s
+Test [9/10] test "benchmark razz 5"...evaluateRazz5Vec-5 cards 47005.5 Khands/s
+Test [10/10] test "benchmark razz 7"...evaluateRazz7Vec-7 cards 43166.2 Khands/s
+
+## with Card.id as u8
+Test [1/10] test "benchmark 5"...evaluate5Cards-5 cards 62611.3 Khands/s
+Test [2/10] test "benchmark 5 c"...evaluate5CardsC-5 cards 69649.6 Khands/s
+Test [3/10] test "benchmark 7"...evaluate7Cards-7 cards 49789.4 Khands/s
+Test [4/10] test "benchmark 7 c"...evaluate7CardsC-7 cards 64953.6 Khands/s
+Test [5/10] test "benchmark omaha"...evaluateOmahaCards-9 cards 19508.0 Khands/s
+Test [6/10] test "benchmark omaha c"...evaluateOmahaCards-9 cards 19617.4 Khands/s
+Test [7/10] test "benchmark shortdeck 5"...evaluateShortdeck5-5 cards 71851.5 Khands/s
+Test [8/10] test "benchmark shortdeck 7"...evaluateShortdeck7-7 cards 70843.5 Khands/s
+Test [9/10] test "benchmark razz 5"...evaluateRazz5Vec-5 cards 43473.7 Khands/s
+Test [10/10] test "benchmark razz 7"...evaluateRazz7Vec-7 cards 43798.1 Khands/s
+
+- ev5 14% faster, still 11% slower than c version
