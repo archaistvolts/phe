@@ -105,7 +105,7 @@ pub fn comb5Cb(lo: u6, hi: u6, comptime cb: fn ([5]u6, ctx: anytype) bool, ctx: 
                 while (d < hi - 1) : (d += 1) {
                     var e: u6 = d + 1;
                     while (e < hi) : (e += 1) {
-                        cb([5]u6{ a, b, c, d, e }, ctx);
+                        if (!cb([5]u6{ a, b, c, d, e }, ctx)) return;
                     }
                 }
             }
@@ -128,7 +128,7 @@ pub fn comb7Cb(lo: u6, hi: u6, comptime cb: fn ([7]u6, ctx: anytype) bool, ctx: 
                         while (d < hi - 1) : (d += 1) {
                             var e: u6 = d + 1;
                             while (e < hi) : (e += 1) {
-                                cb([7]u6{ y, z, a, b, c, d, e }, ctx);
+                                if (!cb([7]u6{ y, z, a, b, c, d, e }, ctx)) return;
                             }
                         }
                     }
@@ -137,34 +137,3 @@ pub fn comb7Cb(lo: u6, hi: u6, comptime cb: fn ([7]u6, ctx: anytype) bool, ctx: 
         }
     }
 }
-
-// pub fn nested_loop(comptime lo: isize, comptime hi: isize, comptime n: usize, loop_level: usize, data: var, f: var) void {
-//     if (loop_level > n) {
-//         return f(loop_level, data);
-//     }
-//     // if we made it past this point,
-//     // we need to continue going in the nested loop
-//     // for i = [-1, 1]
-
-//     for ([1]void{{}} ** (hi - lo)) |_, i| {
-//         // modify entry loop_level
-//         // lattice_state[loop_level] = i
-//         // modify data here
-//         // data[i] += 1;
-
-//         // with entry 1, 2, ..., loop_level fixed,
-//         // call function again to go to next level in nested loop
-//         nested_loop(lo, hi, n, loop_level + 1, data, f);
-//     }
-// }
-
-// fn show(ll: usize, data: *[5]u6) void {
-//     std.debug.warn("ll: {} ", .{ll});
-//     for (data) |e| std.debug.warn("{}, ", .{e});
-//     std.debug.warn("\n", .{});
-// }
-
-// test "nested_loop" {
-//     var data = [1]u6{0} ** 5;
-//     nested_loop(0, 7, 5, 0, &data, show);
-// }

@@ -16,4 +16,8 @@
   - [w] 5 card tests
   - [] why so slow?
 
-- [x] dry up evaluator_tests. create benchmark_runner or something to make benchmarks more uniform. 
+- evaluator_tests
+  - make benchmarks more uniform
+    - [x] create BenchmarkCtx. 
+    - [x] separate validation tests from benchmarks. benchmark tests should be dead simple. 
+  - [] make test "validate razz 7" faster

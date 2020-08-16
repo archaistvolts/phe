@@ -224,8 +224,8 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
     suit_count_hole[h3.id & 0x3] += 1;
     suit_count_hole[h4.id & 0x3] += 1;
 
-    comptime var i: u8 = 0;
-    inline while (i < 4) : (i += 1) {
+    var i: u8 = 0;
+    while (i < 4) : (i += 1) {
         if (suit_count_board[i] >= 3 and suit_count_hole[i] >= 2) {
             var suit_binary_board = [1]u16{0} ** 4;
 
@@ -285,7 +285,7 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
 // The two least significant bits represent the suit, ranged from 0-3.
 // The rest of it represent the rank, ranged from 0-8.
 // 9 * 4 gives 36 ids.
-fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
+pub fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     var suit_hash: u16 = 0;
     suit_hash += suitbit_by_id[a.id];
     suit_hash += suitbit_by_id[b.id];
@@ -321,7 +321,7 @@ fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
 // The two least significant bits represent the suit, ranged from 0-3.
 // The rest of it represent the rank, ranged from 0-8.
 // 9 * 4 gives 36 ids.
-fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
+pub fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
     var suit_hash: u16 = 0;
     suit_hash += suitbit_by_id[a.id];
     suit_hash += suitbit_by_id[b.id];

@@ -34,8 +34,10 @@ pub fn build(b: *Builder) void {
     main_tests.addIncludeDir("src/PokerHandEvaluator/cpp/src/");
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/evaluator_omaha.c", &[_][]const u8{});
     main_tests.addCSourceFile("src/PokerHandEvaluator/cpp/src/hash.c", &[_][]const u8{});
-    main_tests.setFilter("benchmark");
-    main_tests.test_evented_io = true;
+    main_tests.setFilter("validate razz 5");
+    main_tests.setOutputDir("./zig-cache/test_bin");
+    // main_tests.install();
+    // main_tests.test_evented_io = true;
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
 
