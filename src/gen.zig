@@ -289,7 +289,7 @@ fn asc_byrank_alo_hands(context: void, a: *HandsMap.Entry, b: *HandsMap.Entry) b
     return a.value.rank > b.value.rank;
 }
 
-fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
+pub fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
     return Card.rankToAlo(Card.nameToRank(a)) < Card.rankToAlo(Card.nameToRank(b));
 }
 
@@ -430,20 +430,20 @@ test "razzBuild7" {
         ids: [7]u6,
     };
     const cb_inner = struct {
-        fn func(indices: [5]u6, ctx: anytype) void {
+        fn func(indices: [5]u6, ctx: anytype) bool {
             var ids: [5]u6 = undefined;
             for (indices) |idx, i| ids[i] = ctx.ids[idx];
             const rank = ev.evaluateCardsRazz(&Card.cardsFromIds(5, &ids));
             ctx.best = std.math.min(ctx.best, rank.value);
+            return true;
         }
     }.func;
 
     const Context = struct {
         ranks: @TypeOf(ranks),
-        // max: u32,
     };
     const cb = struct {
-        fn func(ids: [7]u6, ctx: anytype) void {
+        fn func(ids: [7]u6, ctx: anytype) bool {
             var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
             util.comb5Cb(0, 7, cb_inner, &ctx_inner);
             var quinary = [1]u6{0} ** 13;
@@ -451,19 +451,16 @@ test "razzBuild7" {
                 quinary[Card.rankToAlo(id >> 2)] += 1;
             const hash = ev.hashQuinary(&quinary, 13, 7);
 
-            // warn("hash {} best {}\n", .{ hash, ctx_inner.best });
             ctx.ranks[hash] = ctx_inner.best;
-            // ctx.max = std.math.max(ctx.max, hash);
+            return true;
         }
     }.func;
     var ctx = Context{
         .ranks = ranks,
-        // .max = 0,
     };
 
     util.comb7Cb(0, 52, cb, &ctx);
 
-    // warn("max {}\n", .{ctx.max});
     const items_per_line = 10;
     output("pub const razz_lookup7 = [_]u16 {{\n", .{});
     var i: usize = 0;
