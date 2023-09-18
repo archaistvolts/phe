@@ -3,9 +3,9 @@ const warn = std.debug.warn;
 const Card = @import("card.zig");
 const Rank = @import("rank.zig");
 const ev = @import("evaluator.zig");
-pub export fn evaluate_5hand_w(hand: *c_void, hand_len: usize) c_short {
-    const rank = ev.evaluate5Hand(@ptrCast([*]const u8, hand)[0..hand_len], 13);
-    return @intCast(c_short, rank.value);
+pub export fn evaluate_5hand_w(hand: *void, hand_len: usize) c_short {
+    const rank = ev.evaluate5Hand(@as([*]const u8, @ptrCast(@alignCast(hand)))[0..hand_len], 13);
+    return @as(c_short, @intCast(rank.value));
 }
 
 // pub export fn hash_quinary5_w(q: *c_void, num_ranks: u8, k: u8) c_ulong {
@@ -39,9 +39,9 @@ pub export fn evaluate_7cards_w(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8)
     ).value;
 }
 
-pub export fn evaluate_7hand_w(hand: *c_void, hand_len: usize) c_short {
-    const rank = ev.evaluate7Hand(@ptrCast([*]const u8, hand)[0..hand_len], 13);
-    return @intCast(c_short, rank.value);
+pub export fn evaluate_7hand_w(hand: *void, hand_len: usize) c_short {
+    const rank = ev.evaluate7Hand(@as([*]const u8, @ptrCast(@alignCast(hand)))[0..hand_len], 13);
+    return @as(c_short, @intCast(rank.value));
 }
 
 pub export fn cards_to_binary5_w(hand: [*]u8) u16 {

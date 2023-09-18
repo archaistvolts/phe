@@ -46,8 +46,8 @@ pub const Category = enum {
         return descriptions[cat.id()];
     }
 
-    pub fn id(cat: Category) @TagType(Category) {
-        return @enumToInt(cat);
+    pub fn id(cat: Category) std.meta.Tag(Category) {
+        return @intFromEnum(cat);
     }
 
     const descriptions = [_][]const u8{

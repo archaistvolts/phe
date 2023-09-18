@@ -1,5 +1,5 @@
 const std = @import("std");
-const warn = std.debug.warn;
+const print = std.debug.print;
 const Card = @import("card.zig");
 const Rank = @import("rank.zig");
 const util = @import("util.zig");
@@ -15,7 +15,7 @@ pub extern const flush_omaha: [4099095]u16;
 
 fn output(comptime fmt: []const u8, args: anytype) void {
     const stdout = std.io.getStdOut();
-    _ = stdout.outStream().print(fmt, args) catch unreachable;
+    _ = stdout.writer().print(fmt, args) catch unreachable;
 }
 
 const CategoryCount = [std.meta.fields(Rank.Category).len]u32;
@@ -24,7 +24,7 @@ const CCDMap = std.StringHashMap(u32);
 const CategoryCountDistinct = [std.meta.fields(Rank.Category).len]CCDMap;
 const log_verbose = false;
 const log_counts = false;
-const output_table = true;
+const output_table = @import("build_options").gen;
 const output_comments = false;
 
 // const allocator = std.heap.page_allocator;
@@ -32,6 +32,7 @@ const allocator = std.heap.c_allocator;
 
 // zig test src/gen.zig --test-filter gensd5 -lc -L zig-cache/lib -l tables > src/hashtable_sd5.zig
 test "gensd5" {
+    if (!output_table) return;
     const T = [5]u8;
     var ctx = .{
         .flushes_sd = std.mem.zeroes([std.math.pow(u16, 2, 9)]u16),
@@ -51,10 +52,11 @@ test "gensd5" {
 
     const cb = struct {
         fn func(ids: [5]u8, ctx_: anytype) !bool {
-            var cards = Card.cardsFromIds(T.len, &ids);
+            var cards = Card.cardsFromIds(@typeInfo(T).Array.len, &ids);
 
             var buf: [20]u8 = undefined;
             const hand = Card.cardsToString(&cards, &buf);
+            _ = hand;
             var rank = ev.evaluateCards(&cards, 13);
             var category = rank.category();
 
@@ -67,12 +69,12 @@ test "gensd5" {
             };
             std.debug.assert(rank.value != 0);
             var cards_sd: [5]Card = undefined;
-            for (cards_sd) |*c, i| c.id = ids[i] - 16;
+            for (&cards_sd, 0..) |*c, i| c.id = ids[i] - 16;
             const category_adjusted = rank.category();
             switch (category) {
                 .straight_flush, .flush => {
                     const bin_sd = ev.cardsToBinary(&cards_sd);
-                    // warn("hand {} bin_sd {b:0<9} {}\n", .{ hand, bin_sd, bin_sd });
+                    // print("hand {} bin_sd {b:0<9} {}\n", .{ hand, bin_sd, bin_sd });
                     ctx_.flushes_sd[bin_sd] = rank.value;
                 },
                 else => {
@@ -86,9 +88,9 @@ test "gensd5" {
             if (log_counts) {
                 const catid_adj = category_adjusted.id();
                 const catid = category.id();
-                category_counts[catid] += 1;
-                ctx_.category_rank_boundaries[catid_adj][0] = std.math.min(ctx_.category_rank_boundaries[catid_adj][0], rank.value);
-                ctx_.category_rank_boundaries[catid_adj][1] = std.math.max(ctx_.category_rank_boundaries[catid_adj][1], rank.value);
+                ctx_.category_counts[catid] += 1;
+                ctx_.category_rank_boundaries[catid_adj][0] = @min(ctx_.category_rank_boundaries[catid_adj][0], rank.value);
+                ctx_.category_rank_boundaries[catid_adj][1] = @max(ctx_.category_rank_boundaries[catid_adj][1], rank.value);
                 var quinary = [1]u8{0} ** 9;
                 for (cards_sd) |c| quinary[c.id >> 2] += 1;
                 const qs = try std.mem.dupe(allocator, u8, &quinary);
@@ -105,24 +107,25 @@ test "gensd5" {
 }
 
 fn warnLogCounts(category_counts: CategoryCount, category_counts_distinct: CategoryCountDistinct, category_rank_boundaries: CategoryCountBoundary) void {
-    warn("total counts\n", .{});
-    for (category_counts) |cc, i| {
-        warn("cat {} count {}\n", .{ @intToEnum(Rank.Category, @truncate(@TagType(Rank.Category), i)), cc });
+    print("total counts\n", .{});
+    for (category_counts, 0..) |cc, i| {
+        print("cat {} count {}\n", .{ @as(Rank.Category, @enumFromInt(@as(std.meta.Tag(Rank.Category), @truncate(i)))), cc });
     }
-    warn("distinct counts\n", .{});
-    for (category_counts_distinct) |ccd, i| {
-        warn("cat {} count {}\n", .{ @intToEnum(Rank.Category, @truncate(@TagType(Rank.Category), i)), ccd.count() });
+    print("distinct counts\n", .{});
+    for (category_counts_distinct, 0..) |ccd, i| {
+        print("cat {} count {}\n", .{ @as(Rank.Category, @enumFromInt(@as(std.meta.Tag(Rank.Category), @truncate(i)))), ccd.count() });
     }
-    warn("category rank ranges\n", .{});
-    for (category_rank_boundaries) |chb, i| {
-        const cat = @intToEnum(Rank.Category, @truncate(@TagType(Rank.Category), i));
+    print("category rank ranges\n", .{});
+    for (category_rank_boundaries, 0..) |chb, i| {
+        const cat = @as(Rank.Category, @enumFromInt(@as(std.meta.Tag(Rank.Category), @truncate(i))));
         if (cat == .invalid) continue;
-        warn("cat {} range {}-{}:{}\n", .{ cat, chb[0], chb[1], chb[1] - chb[0] });
+        print("cat {} range {}-{}:{}\n", .{ cat, chb[0], chb[1], chb[1] - chb[0] });
     }
 }
 
 // zig test src/gen.zig --test-filter gensd7 -lc -L zig-cache/lib -l tables > src/hashtable_sd7.zig
 test "gensd7" {
+    if (!output_table) return;
     const T = [7]u8;
     var ctx = .{
         .flushes_sd = std.mem.zeroes([std.math.pow(u16, 2, 9)]u16),
@@ -138,10 +141,11 @@ test "gensd7" {
 
     const cb = struct {
         fn func(ids: [7]u8, ctx_: anytype) !bool {
-            var cards = Card.cardsFromIds(T.len, &ids);
+            var cards = Card.cardsFromIds(@typeInfo(T).Array.len, &ids);
 
             var buf: [20]u8 = undefined;
             const hand = Card.cardsToString(&cards, &buf);
+            _ = hand;
             var rank = ev.evaluateCards(&cards, 13);
             var category = rank.category();
             rank.value = switch (rank.value) {
@@ -153,22 +157,23 @@ test "gensd7" {
                     else => blk: {
                         const bin = ev.cardsToBinary(&cards);
                         const wheel_mask = 0b1000011110000;
-                        break :blk if (bin & wheel_mask == wheel_mask and @enumToInt(rank.category()) > @enumToInt(@as(Rank.Category, .straight)))
+                        break :blk if (bin & wheel_mask == wheel_mask and @intFromEnum(rank.category()) > @intFromEnum(@as(Rank.Category, .straight)))
                             1609
                         else
                             rank.value;
-                        // warn("found str8 {} rank {} {b}\n", .{ hand, rank.value, bin });
+                        // print("found str8 {} rank {} {b}\n", .{ hand, rank.value, bin });
                     },
                 },
             };
             std.debug.assert(rank.value != 0);
             var cards_sd: [7]Card = undefined;
-            for (cards_sd) |*c, i| c.id = ids[i] - 16;
+            for (&cards_sd, 0..) |*c, i| c.id = ids[i] - 16;
             const category_adjusted = rank.category();
+            _ = category_adjusted;
             switch (category) {
                 .straight_flush, .flush => {
                     const bin_sd = ev.cardsToBinary(&cards_sd);
-                    // warn("hand {} bin_sd {b:0<9} {}\n", .{ hand, bin_sd, bin_sd });
+                    // print("hand {} bin_sd {b:0<9} {}\n", .{ hand, bin_sd, bin_sd });
                     ctx_.flushes_sd[bin_sd] = rank.value;
                 },
                 else => {
@@ -179,7 +184,11 @@ test "gensd7" {
                 },
             }
             if (log_counts)
-                _ = try ctx_.category_counts_distinct[category.id()].put(binstr, if (ctx_.category_counts_distinct[category.id()].getValue(binstr)) |c| c + 1 else 1);
+                unreachable;
+            // _ = try ctx_.category_counts_distinct[category.id()].put(binstr, if (ctx_.category_counts_distinct[category.id()].getValue(binstr)) |c|
+            //     c + 1
+            // else
+            //     1);
             return true;
         }
     }.func;
@@ -199,7 +208,7 @@ fn outputTables(flushes_sd: [512]u16, nonflushes_sd: anytype, output_comments_: 
             output("{}, // {}\n", .{ flushes_sd[i], i });
         } else {
             var j: usize = i;
-            while (j < std.math.min(i + items_per_line, flushes_sd.len)) : (j += 1) {
+            while (j < @min(i + items_per_line, flushes_sd.len)) : (j += 1) {
                 output("{}, ", .{flushes_sd[j]});
             }
             i = j - 1;
@@ -216,7 +225,7 @@ fn outputTables(flushes_sd: [512]u16, nonflushes_sd: anytype, output_comments_: 
             output("{}, // {}\n", .{ nonflushes_sd[i], i });
         } else {
             var j: usize = i;
-            while (j < std.math.min(i + items_per_line, nonflushes_sd.len)) : (j += 1) {
+            while (j < @min(i + items_per_line, nonflushes_sd.len)) : (j += 1) {
                 output("{}, ", .{nonflushes_sd[j]});
             }
             output("\n", .{});
@@ -230,24 +239,25 @@ fn outputTables(flushes_sd: [512]u16, nonflushes_sd: anytype, output_comments_: 
 // zig test src/gen.zig --test-filter razzBuildFromExisting -lc -ltables -Lzig-cache/lib -Drelease-fast
 // use existing lookup values to create razz quinary hash => rank lookup table
 test "razzBuildFromExisting" {
+    if (!output_table) return;
     const gen_table = false;
     const debug = true;
 
     const filename = "../../go/pokerserver/phe/phe_gen/razzLookup.txt";
-    const file = try std.fs.cwd().openFile(filename, .{ .read = true });
+    const file = try std.fs.cwd().openFile(filename, .{});
     defer file.close();
-    const stream = &file.inStream();
+    const stream = file.reader();
     var buf: [20]u8 = undefined;
     var ranks = [1]u16{0} ** 6162;
     var max: u32 = 0;
     var min: u32 = std.math.maxInt(u32);
     while (try stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
-        // warn("line {}\n", .{line});
-        var parts = std.mem.split(line, ":");
+        // print("line {}\n", .{line});
+        var parts = std.mem.split(u8, line, ":");
         var hand = [1]u8{'c'} ** 10;
         const ranks_str = parts.next().?;
-        for (ranks_str) |card, i| hand[i * 2] = card;
-        // warn("hand {}\n", .{hand});
+        for (ranks_str, 0..) |card, i| hand[i * 2] = card;
+        // print("hand {}\n", .{hand});
         const cards = Card.cardsToAlo(5, &Card.cardsFromString(5, &hand));
         // const alo_cards = Card.cardsToAlo(5, &cards);
         const rank_str = parts.next().?;
@@ -256,19 +266,19 @@ test "razzBuildFromExisting" {
         for (cards) |card| quinary[card.id >> 2] += 1;
         const hash = ev.hashQuinary(&quinary, 13, 5);
         if (debug)
-            warn("{}: {} ({}) ranks '{}' rank_str '{}' \n", .{ hash, rank, hand, ranks_str, rank_str });
+            print("{}: {} ({any}) ranks '{s}' rank_str '{s}' \n", .{ hash, rank, hand, ranks_str, rank_str });
         ranks[hash - 1] = rank + 1;
-        max = std.math.max(hash, max);
-        min = std.math.min(hash, min);
+        max = @max(hash, max);
+        min = @min(hash, min);
     }
     if (gen_table) {
-        // warn("max {} min {}\n", .{ max, min });
+        // print("max {} min {}\n", .{ max, min });
         const items_per_line = 10;
         output("pub const razz_lookup5 = [_]u16{{\n", .{});
         var i: usize = 0;
         while (i < ranks.len) : (i += 1) {
             var j: usize = i;
-            while (j < std.math.min(i + items_per_line, ranks.len)) : (j += 1) {
+            while (j < @min(i + items_per_line, ranks.len)) : (j += 1) {
                 output("{}, ", .{ranks[j]});
             }
             output("\n", .{});
@@ -284,20 +294,23 @@ const RankInfo = struct {
 };
 const HandsMap = std.StringHashMap(RankInfo);
 
-fn asc_alo_hands(context: void, a: *HandsMap.Entry, b: *HandsMap.Entry) bool {
-    for (a.key) |ae, i| {
-        const be = b.key[i];
+fn asc_alo_hands(context: void, a: HandsMap.Entry, b: HandsMap.Entry) bool {
+    _ = context;
+    for (a.key_ptr.*, 0..) |ae, i| {
+        const be = b.key_ptr.*[i];
         if (ae == be) continue;
         return lessthan_rank_alo({}, ae, be);
     }
     return false;
 }
 
-fn asc_byrank_alo_hands(context: void, a: *HandsMap.Entry, b: *HandsMap.Entry) bool {
-    return a.value.rank > b.value.rank;
+fn asc_byrank_alo_hands(context: void, a: HandsMap.Entry, b: HandsMap.Entry) bool {
+    _ = context;
+    return a.value_ptr.rank > b.value_ptr.rank;
 }
 
 pub fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
+    _ = context;
     return Card.rankToAlo(Card.nameToRank(a)) < Card.rankToAlo(Card.nameToRank(b));
 }
 
@@ -308,6 +321,7 @@ pub fn lessthan_rank_alo(context: void, a: u8, b: u8) bool {
 // all hands from non-paired hands classes can be stored in a set
 // these can be ordered by alo card rank (A => 0, K => 12)
 test "razzBuild5" {
+    if (!output_table) return;
     const len = 5;
     const Ctx = struct {
         fuzz_num_hands: usize = 0,
@@ -346,13 +360,13 @@ test "razzBuild5" {
             const hand = Card.cardsToString(&cards, &buf);
             var rank_names = [_]u8{ hand[0], hand[2], hand[4], hand[6], hand[8] };
             if (std.mem.indexOfScalar(Rank.Category, &[_]Rank.Category{ .straight_flush, .flush, .straight, .high_card }, category) != null) {
-                std.sort.sort(u8, &rank_names, {}, lessthan_rank_alo);
+                std.mem.sort(u8, &rank_names, {}, lessthan_rank_alo);
                 std.mem.reverse(u8, &rank_names);
             } else {
                 const cards_alo = Card.cardsToAlo(5, &cards);
                 rank = ev.evaluate5Cards(cards_alo[0], cards_alo[1], cards_alo[2], cards_alo[3], cards_alo[4], 13);
             }
-            const hr = try std.mem.dupe(allocator, u8, &rank_names);
+            const hr = try allocator.dupe(u8, &rank_names);
             _ = try map_to_use.put(hr, .{ .rank = rank.value, .rank_names = hr });
             ctx_.fuzz_num_hands += 1;
             return true;
@@ -362,34 +376,36 @@ test "razzBuild5" {
     try util.comb5Cb(0, 52, cb, &ctx);
     var ranks = [1]RankInfo{.{}} ** 6175;
     const hands_maps = [_]*HandsMap{ &ctx.non_paired_hands_map, &ctx.onepr_hands_map, &ctx.twopr_hands_map, &ctx.threekind_hands_map, &ctx.fullhouse_hands_map, &ctx.fourkind_hands_map };
-    // warn("non_paired_hands_map count {}", .{non_paired_hands_map.count()});
+    // print("non_paired_hands_map count {}", .{non_paired_hands_map.count()});
     var hand_rank: u16 = 0;
     for (hands_maps) |hands_map| {
         // output("// hands_map count {}\n", .{hands_map.count()});
-        var hands_list = std.ArrayList(*HandsMap.Entry).init(allocator);
+        var hands_list = std.ArrayList(HandsMap.Entry).init(allocator);
         defer hands_list.deinit();
         var it = hands_map.iterator();
         while (it.next()) |kv| _ = try hands_list.append(kv);
         if (hands_map == &ctx.non_paired_hands_map) {
             // output("// non_paired_hands_map\n", .{});
-            std.sort.sort(*HandsMap.Entry, hands_list.items, {}, asc_alo_hands);
-        } else
-            std.sort.sort(*HandsMap.Entry, hands_list.items, {}, asc_byrank_alo_hands);
+            std.mem.sort(HandsMap.Entry, hands_list.items, {}, asc_alo_hands);
+        } else std.mem.sort(HandsMap.Entry, hands_list.items, {}, asc_byrank_alo_hands);
 
-        for (hands_list.items) |entry, i| {
+        for (hands_list.items, 0..) |entry, i| {
+            _ = i;
             // output("{}, // {}\n", .{ hand_rank, entry.key });
             hand_rank += 1;
             var quinary = [1]u8{0} ** 13;
-            for (entry.key) |r|
+            for (entry.key_ptr.*) |r|
                 quinary[Card.rankToAlo(Card.nameToRank(r))] += 1;
             const hash = ev.hashQuinary(&quinary, 13, 5);
-            std.testing.expectEqual(ranks[hash].rank, 0);
-            ranks[hash] = .{ .rank = hand_rank, .rank_names = entry.key };
+            try std.testing.expectEqual(ranks[hash].rank, 0);
+            ranks[hash] = .{ .rank = hand_rank, .rank_names = entry.key_ptr.* };
         }
     }
     const items_per_line = 10;
     var current_map = ctx.non_paired_hands_map;
+    _ = current_map;
     var current_map_i: u16 = 0;
+    _ = current_map_i;
     output("pub const razz_lookup5 = [_]u16 {{\n", .{});
     var i: usize = 0;
     while (i < ranks.len) : (i += 1) {
@@ -397,7 +413,7 @@ test "razzBuild5" {
             output("{}, // {}\n", .{ ranks[i].rank, ranks[i].rank_names });
         } else {
             var j: usize = i;
-            while (j < std.math.min(i + items_per_line, ranks.len)) : (j += 1) {
+            while (j < @min(i + items_per_line, ranks.len)) : (j += 1) {
                 output("{}, ", .{ranks[j].rank});
             }
             output("\n", .{});
@@ -409,12 +425,18 @@ test "razzBuild5" {
 
 // zig test src/gen.zig --test-filter razzBuild7 -ltables -Lzig-cache/lib -Drelease-fast > src/hashtable_razz7.zig
 test "razzBuild7" {
+    if (!output_table) return;
     const len = 7;
+    _ = len;
     var fuzz_num_hands: usize = 0;
+    _ = fuzz_num_hands;
     const max_num_hands = 300;
+    _ = max_num_hands;
     // var ranks = [1]RankInfo{.{}} ** 6175;
-    var ranks = [1]u16{0} ** 49205;
+    const Ranks = [49205]u16;
+    var ranks = [1]u16{0} ** @typeInfo(Ranks).Array.len;
     const hashtable_razz5 = @import("hashtable_razz5.zig");
+    _ = hashtable_razz5;
 
     const ContextInner = struct {
         best: u16,
@@ -423,15 +445,15 @@ test "razzBuild7" {
     const cb_inner = struct {
         fn func(indices: [5]u8, ctx: anytype) !bool {
             var ids: [5]u8 = undefined;
-            for (indices) |idx, i| ids[i] = ctx.ids[idx];
+            for (indices, 0..) |idx, i| ids[i] = ctx.ids[idx];
             const rank = ev.evaluateCardsRazz(&Card.cardsFromIds(5, &ids));
-            ctx.best = std.math.min(ctx.best, rank.value);
+            ctx.best = @min(ctx.best, rank.value);
             return true;
         }
     }.func;
 
     const Context = struct {
-        ranks: @TypeOf(ranks),
+        ranks: Ranks,
     };
     const cb = struct {
         fn func(ids: [7]u8, ctx: anytype) !bool {
@@ -460,7 +482,7 @@ test "razzBuild7" {
             output("{}, // {}\n", .{ctx.ranks[i]});
         } else {
             var j: usize = i;
-            while (j < std.math.min(i + items_per_line, ctx.ranks.len)) : (j += 1) {
+            while (j < @min(i + items_per_line, ctx.ranks.len)) : (j += 1) {
                 output("{}, ", .{ctx.ranks[j]});
             }
             output("\n", .{});

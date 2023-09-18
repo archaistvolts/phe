@@ -58,21 +58,21 @@ pub const suitbit_by_id = [_]u16{
 pub fn evaluate5Hand(hand: []const u8, comptime num_ranks: u8) Rank {
     std.debug.assert(hand.len == 10);
     var cards: [5]Card = undefined;
-    for (cards) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
+    for (&cards, 0..) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
     return evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], num_ranks);
 }
 
 pub fn evaluate7Hand(hand: []const u8, comptime num_ranks: u8) Rank {
     std.debug.assert(hand.len == 14);
     var cards: [7]Card = undefined;
-    for (cards) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
+    for (&cards, 0..) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
     return evaluate7Cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], num_ranks);
 }
 
 pub fn evaluateOmahaHand(hand: []const u8) Rank {
     std.debug.assert(hand.len == 18);
     var cards: [9]Card = undefined;
-    for (cards) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
+    for (&cards, 0..) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
     return evaluateOmahaCards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7], cards[8]);
 }
 
@@ -163,7 +163,7 @@ pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
     return Rank{ .value = noflush7[hash] };
 }
 
-pub fn hashQuinary(q: []const u8, comptime len: u8, k_: u8) u32 {
+pub fn hashQuinary(q: [*]const u8, comptime len: u8, k_: u8) u32 {
     var sum: u32 = 0;
     comptime var i: u16 = 0;
     var k = k_;
@@ -278,7 +278,7 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
 
     value_noflush = noflush_omaha[board_hash * 1820 + hole_hash];
 
-    return Rank.init(std.math.min(value_flush, value_noflush));
+    return Rank.init(@min(value_flush, value_noflush));
 }
 
 // EvSD5 Card id, ranged from 0 to 35.
@@ -385,13 +385,28 @@ pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     return Rank.init(hashtable_razz5[hash]);
 }
 
+pub fn evaluate7CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
+    var quinary = [1]u8{0} ** 13;
+    quinary[Card.rankToAlo(a.id >> 2)] += 1;
+    quinary[Card.rankToAlo(b.id >> 2)] += 1;
+    quinary[Card.rankToAlo(c.id >> 2)] += 1;
+    quinary[Card.rankToAlo(d.id >> 2)] += 1;
+    quinary[Card.rankToAlo(e.id >> 2)] += 1;
+    quinary[Card.rankToAlo(f.id >> 2)] += 1;
+    quinary[Card.rankToAlo(g.id >> 2)] += 1;
+    const hash = hashQuinary(&quinary, 13, 7);
+    // warn("hash {} hashtable_razz5[hash] {}\n", .{ hash, hashtable_razz5[hash] });
+
+    return Rank.init(hashtable_razz7[hash]);
+}
+
 // TODO: replace with Vector(5, u8) once https://github.com/ziglang/zig/issues/3246 is resolved
-const u8x5 = std.meta.Vector(5, u8);
+const u8x5 = @Vector(5, u8);
 pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     var ranks = u8x5{ a.id, b.id, c.id, d.id, e.id };
-    ranks >>= @splat(5, @as(u3, 2));
-    ranks += @splat(5, @as(u8, 1));
-    ranks %= @splat(5, @as(u8, 13));
+    ranks >>= @splat(@as(u3, 2));
+    ranks += @splat(@as(u8, 1));
+    ranks %= @splat(@as(u8, 13));
     var quinary = [1]u8{0} ** 13;
     comptime var i: u8 = 0;
     inline while (i < 5) : (i += 1) quinary[ranks[i]] += 1;
@@ -411,12 +426,12 @@ pub fn evaluateCardsRazz(cards: []const Card) Rank {
 }
 
 // TODO: replace with Vector(7, u8) once https://github.com/ziglang/zig/issues/3246 is resolved
-const u8x7 = std.meta.Vector(7, u8);
+const u8x7 = @Vector(7, u8);
 pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
     var ranks = u8x7{ a.id, b.id, c.id, d.id, e.id, f.id, g.id };
-    ranks >>= @splat(7, @as(u3, 2));
-    ranks += @splat(7, @as(u8, 1));
-    ranks %= @splat(7, @as(u8, 13));
+    ranks >>= @splat(@as(u3, 2));
+    ranks += @splat(@as(u8, 1));
+    ranks %= @splat(@as(u8, 13));
     var quinary = [1]u8{0} ** 13;
     comptime var i: u8 = 0;
     inline while (i < 7) : (i += 1) quinary[ranks[i]] += 1;

@@ -87,7 +87,7 @@ pub fn toRankSuit(card: Card) [2]u8 {
         12 => 'A',
         else => '?',
     };
-    const suit = suitToName(@intCast(u2, card.id & 0b11));
+    const suit = suitToName(@as(u2, @intCast(card.id & 0b11)));
     return [2]u8{ rank, suit };
 }
 
@@ -103,14 +103,14 @@ pub fn toRankSuitSd(card: Card) [2]u8 {
         8 => 'A',
         else => '?',
     };
-    const st = card.id & 0b11;
-    const suit = suitToName(@intCast(u2, card.id % 4));
+    // const st = card.id & 0b11;
+    const suit = suitToName(@as(u2, @intCast(card.id % 4)));
     return [2]u8{ rank, suit };
 }
 
 pub fn cardsToString(cards: []const Card, buf: []u8) []u8 {
     std.debug.assert(cards.len * 2 <= buf.len);
-    for (cards) |card, i| {
+    for (cards, 0..) |card, i| {
         std.mem.copy(u8, buf[i * 2 .. i * 2 + 2], &card.toRankSuit());
     }
     return buf[0 .. cards.len * 2];
@@ -118,7 +118,7 @@ pub fn cardsToString(cards: []const Card, buf: []u8) []u8 {
 
 pub fn cardsToStringSd(cards: []const Card, buf: []u8) []u8 {
     std.debug.assert(cards.len * 2 <= buf.len);
-    for (cards) |card, i| {
+    for (cards, 0..) |card, i| {
         std.mem.copy(u8, buf[i * 2 .. i * 2 + 2], &card.toRankSuitSd());
     }
     return buf[0 .. cards.len * 2];
@@ -127,20 +127,20 @@ pub fn cardsToStringSd(cards: []const Card, buf: []u8) []u8 {
 pub fn cardsFromString(comptime len: u8, string: []const u8) [len]Card {
     std.debug.assert(string.len == len * 2);
     var cards: [len]Card = undefined;
-    for (cards) |*card, i| card.* = initFromName(string[i * 2 .. i * 2 + 2]);
+    for (&cards, 0..) |*card, i| card.* = initFromName(string[i * 2 .. i * 2 + 2]);
     return cards;
 }
 
 pub fn cardsFromIds(comptime len: u8, ids: []const u8) [len]Card {
     std.debug.assert(ids.len == len);
     var result: [len]Card = undefined;
-    for (result) |*id, i| id.* = init(ids[i]);
+    for (&result, 0..) |*id, i| id.* = init(ids[i]);
     return result;
 }
 
 pub fn cardsFromStringSd(comptime len: u8, string: []const u8) [len]Card {
     var cards: [len]Card = undefined;
-    for (cards) |*card, i| card.* = initFromNameSd(string[i * 2 .. i * 2 + 2]);
+    for (&cards, 0..) |*card, i| card.* = initFromNameSd(string[i * 2 .. i * 2 + 2]);
     return cards;
 }
 
@@ -151,16 +151,17 @@ test "round trip ids to string" {
 
     const cb = struct {
         fn func(ids: [5]u8, ctx: anytype) !bool {
+            _ = ctx;
             var cards = cardsFromIds(5, &ids);
             var buf: [10]u8 = undefined;
             const hand = cardsToString(cards[0..5], &buf);
             const cards2 = cardsFromString(5, hand);
             var buf2: [10]u8 = undefined;
             const hand2 = cardsToString(cards2[0..5], &buf2);
-            testing.expectEqualSlices(u8, hand, hand2);
+            try testing.expectEqualSlices(u8, hand, hand2);
             var ids2: [5]u8 = undefined;
-            for (cards2) |c, i| ids2[i] = c.id;
-            testing.expectEqualSlices(u8, ids[0..], ids2[0..]);
+            for (cards2, 0..) |c, i| ids2[i] = c.id;
+            try testing.expectEqualSlices(u8, ids[0..], ids2[0..]);
             return true;
         }
     }.func;
@@ -174,21 +175,21 @@ pub fn toAlo(card: Card) Card {
 }
 
 test "toAlo" {
-    testing.expectEqual(Card.initFromName("2c"), Card.toAlo(Card.initFromName("Ac")));
-    testing.expectEqual(Card.initFromName("2s"), Card.toAlo(Card.initFromName("As")));
-    testing.expectEqual(Card.initFromName("3c"), Card.toAlo(Card.initFromName("2c")));
-    testing.expectEqual(Card.initFromName("4c"), Card.toAlo(Card.initFromName("3c")));
-    testing.expectEqual(Card.initFromName("5c"), Card.toAlo(Card.initFromName("4c")));
-    testing.expectEqual(Card.initFromName("6c"), Card.toAlo(Card.initFromName("5c")));
-    testing.expectEqual(Card.initFromName("7c"), Card.toAlo(Card.initFromName("6c")));
-    testing.expectEqual(Card.initFromName("8c"), Card.toAlo(Card.initFromName("7c")));
-    testing.expectEqual(Card.initFromName("9c"), Card.toAlo(Card.initFromName("8c")));
-    testing.expectEqual(Card.initFromName("Tc"), Card.toAlo(Card.initFromName("9c")));
-    testing.expectEqual(Card.initFromName("Jc"), Card.toAlo(Card.initFromName("Tc")));
-    testing.expectEqual(Card.initFromName("Qc"), Card.toAlo(Card.initFromName("Jc")));
-    testing.expectEqual(Card.initFromName("Kc"), Card.toAlo(Card.initFromName("Qc")));
-    testing.expectEqual(Card.initFromName("Ac"), Card.toAlo(Card.initFromName("Kc")));
-    testing.expectEqual(Card.initFromName("As"), Card.toAlo(Card.initFromName("Ks")));
+    try testing.expectEqual(Card.initFromName("2c"), Card.toAlo(Card.initFromName("Ac")));
+    try testing.expectEqual(Card.initFromName("2s"), Card.toAlo(Card.initFromName("As")));
+    try testing.expectEqual(Card.initFromName("3c"), Card.toAlo(Card.initFromName("2c")));
+    try testing.expectEqual(Card.initFromName("4c"), Card.toAlo(Card.initFromName("3c")));
+    try testing.expectEqual(Card.initFromName("5c"), Card.toAlo(Card.initFromName("4c")));
+    try testing.expectEqual(Card.initFromName("6c"), Card.toAlo(Card.initFromName("5c")));
+    try testing.expectEqual(Card.initFromName("7c"), Card.toAlo(Card.initFromName("6c")));
+    try testing.expectEqual(Card.initFromName("8c"), Card.toAlo(Card.initFromName("7c")));
+    try testing.expectEqual(Card.initFromName("9c"), Card.toAlo(Card.initFromName("8c")));
+    try testing.expectEqual(Card.initFromName("Tc"), Card.toAlo(Card.initFromName("9c")));
+    try testing.expectEqual(Card.initFromName("Jc"), Card.toAlo(Card.initFromName("Tc")));
+    try testing.expectEqual(Card.initFromName("Qc"), Card.toAlo(Card.initFromName("Jc")));
+    try testing.expectEqual(Card.initFromName("Kc"), Card.toAlo(Card.initFromName("Qc")));
+    try testing.expectEqual(Card.initFromName("Ac"), Card.toAlo(Card.initFromName("Kc")));
+    try testing.expectEqual(Card.initFromName("As"), Card.toAlo(Card.initFromName("Ks")));
 }
 
 const invalid_rank = std.math.maxInt(u8);
