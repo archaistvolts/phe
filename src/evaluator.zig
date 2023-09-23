@@ -2,10 +2,7 @@ const std = @import("std");
 const warn = std.debug.warn;
 const Card = @import("card.zig");
 const Rank = @import("rank.zig");
-const _export = @import("export.zig");
-comptime {
-    _ = _export;
-}
+
 extern const flush: [8192]u16;
 extern const noflush5: [6175]u16;
 extern const noflush7: [49205]u16;

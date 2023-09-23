@@ -3,14 +3,14 @@ const Builder = std.build.Builder;
 
 const build_shared_lib = false;
 
-pub fn build(b: *Builder) void {
+pub fn build(b: *Builder) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const tables = b.addSharedLibrary(.{
         .name = "tables",
         .root_source_file = .{ .path = "src/tables.zig" },
         .version = if (build_shared_lib)
-            std.builtin.Version.parse("0.0.0") catch unreachable
+            std.SemanticVersion.parse("0.0.0") catch unreachable
         else
             null,
         .target = target,
@@ -18,12 +18,12 @@ pub fn build(b: *Builder) void {
             .preferred_optimize_mode = .ReleaseFast,
         }),
     });
-    if (build_shared_lib)
-        tables.force_pic = true;
+    if (build_shared_lib) tables.force_pic = true;
     tables.addCSourceFile(.{
         .file = .{ .path = "src/PokerHandEvaluator/cpp/src/tables_omaha.c" },
         .flags = &[_][]const u8{},
     });
+    tables.export_symbol_names = &.{"flush"};
     b.installArtifact(tables);
 
     const lib =
@@ -31,7 +31,7 @@ pub fn build(b: *Builder) void {
         .name = "phe",
         .root_source_file = .{ .path = "src/evaluator.zig" },
         .version = if (build_shared_lib)
-            std.builtin.Version.parse("0.0.0") catch unreachable
+            std.SemanticVersion.parse("0.0.0") catch unreachable
         else
             null,
         .target = target,
@@ -63,30 +63,15 @@ pub fn build(b: *Builder) void {
     test_step.dependOn(&run_tests.step);
     b.installArtifact(main_tests);
 
-    if (false) {
-        const exe = b.addExecutable(.{
-            .name = "phe",
-            .root_source_file = .{ .path = "src/evaluator_tests.zig" },
-            .target = target,
-            .optimize = optimize,
-        });
-        exe.linkSystemLibrary("tables");
-        exe.addLibraryPath("./zig-cache/lib");
-        exe.linkLibC();
-        exe.addCSourceFiles(&.{
-            "src/PokerHandEvaluator/cpp/src/evaluator_omaha.c",
-            "src/PokerHandEvaluator/cpp/src/hash.c",
-        });
-        b.installArtifact(exe);
-
-        //     const tracy = b.option([]const u8, "tracy", "Enable Tracy integration. Supply path to Tracy source");
-        //     exe.addBuildOption(bool, "enable_tracy", tracy != null);
-        //     if (tracy) |tracy_path| {
-        //         const client_cpp = std.fs.path.join(b.allocator, &[_][]const u8{ tracy_path, "TracyClient.cpp" }) catch unreachable;
-        //         exe.addIncludeDir(tracy_path);
-        //         exe.addCSourceFile(client_cpp, &[_][]const u8{ "-DTRACY_ENABLE=1", "-fno-sanitize=undefined" });
-        //         exe.linkSystemLibraryName("c++");
-        //         exe.linkLibC();
-        //     }
-    }
+    const wasm_lib = b.addSharedLibrary(.{
+        .name = "phe",
+        .root_source_file = .{ .path = "src/export.zig" },
+        .target = try std.zig.CrossTarget.parse(.{ .arch_os_abi = "wasm32-freestanding" }),
+        .optimize = optimize,
+    });
+    wasm_lib.import_symbols = true;
+    wasm_lib.export_symbol_names = &.{
+        "cards_to_binary7_w", "cards_to_binary5_w", "alloc", "free",
+    };
+    b.installArtifact(wasm_lib);
 }
