@@ -4,14 +4,14 @@ const build_shared_lib = false;
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
     const tables_mod = b.createModule(.{
         .root_source_file = b.path("src/tables.zig"),
         .target = target,
-        .optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSmall }),
+        .optimize = .ReleaseSmall,
     });
-    tables_mod.addCSourceFile(.{ .file = b.path("src/PokerHandEvaluator/cpp/src/tables_omaha.c") });
-    tables_mod.export_symbol_names = &.{"flush"};
-
+    const phe_dep = b.dependency("PokerHandEvaluator", .{ .target = target, .optimize = optimize });
+    // tables_mod.export_symbol_names = &.{"flush"};
     const tables = b.addLibrary(.{
         .linkage = .dynamic,
         .name = "tables",
@@ -21,6 +21,8 @@ pub fn build(b: *std.Build) !void {
         else
             null,
     });
+    tables_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/tables_omaha.c") });
+    tables_mod.addIncludePath(phe_dep.path("cpp/src"));
     if (build_shared_lib) tables.force_pic = true;
     b.installArtifact(tables);
 
@@ -50,12 +52,10 @@ pub fn build(b: *std.Build) !void {
     });
     main_tests.root_module.linkLibrary(tables);
     main_tests.root_module.link_libc = true;
-    main_tests.root_module.addCSourceFiles(.{ .files = &.{
-        "src/PokerHandEvaluator/cpp/src/evaluator5.c",
-        "src/PokerHandEvaluator/cpp/src/evaluator7.c",
-        "src/PokerHandEvaluator/cpp/src/evaluator_omaha.c",
-        "src/PokerHandEvaluator/cpp/src/hash.c",
-    }, .flags = &.{} });
+    main_tests.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator5.c") });
+    main_tests.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator7.c") });
+    main_tests.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator_omaha.c") });
+    main_tests.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hash.c") });
     main_tests.filters = if (b.option([]const u8, "test-filter", "test filter")) |f| b.dupeStrings(&.{f}) else &.{};
     const options = b.addOptions();
     const gen_option = b.option(bool, "gen", "generate code output to stdout") orelse false;

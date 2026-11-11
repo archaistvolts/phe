@@ -1,3 +1,4 @@
 .zig-cache/
 src/PokerHandEvaluator/
 zig-out/
+zig-pkg/
