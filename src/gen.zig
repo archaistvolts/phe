@@ -147,7 +147,7 @@ test "gensd7" {
             const hand = Card.cardsToString(&cards, &buf);
             _ = hand;
             var rank = ev.evaluateCards(&cards, 13);
-            var category = rank.category();
+            const category = rank.category();
             rank.value = switch (rank.value) {
                 // 6789A flush
                 747 => 10,
@@ -402,10 +402,6 @@ test "razzBuild5" {
         }
     }
     const items_per_line = 10;
-    var current_map = ctx.non_paired_hands_map;
-    _ = current_map;
-    var current_map_i: u16 = 0;
-    _ = current_map_i;
     output("pub const razz_lookup5 = [_]u16 {{\n", .{});
     var i: usize = 0;
     while (i < ranks.len) : (i += 1) {
@@ -426,17 +422,8 @@ test "razzBuild5" {
 // zig test src/gen.zig --test-filter razzBuild7 -ltables -Lzig-cache/lib -Drelease-fast > src/hashtable_razz7.zig
 test "razzBuild7" {
     if (!output_table) return;
-    const len = 7;
-    _ = len;
-    var fuzz_num_hands: usize = 0;
-    _ = fuzz_num_hands;
-    const max_num_hands = 300;
-    _ = max_num_hands;
-    // var ranks = [1]RankInfo{.{}} ** 6175;
     const Ranks = [49205]u16;
-    var ranks = [1]u16{0} ** @typeInfo(Ranks).Array.len;
-    const hashtable_razz5 = @import("hashtable_razz5.zig");
-    _ = hashtable_razz5;
+    const ranks = [1]u16{0} ** @typeInfo(Ranks).Array.len;
 
     const ContextInner = struct {
         best: u16,

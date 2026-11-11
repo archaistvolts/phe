@@ -111,7 +111,7 @@ pub fn toRankSuitSd(card: Card) [2]u8 {
 pub fn cardsToString(cards: []const Card, buf: []u8) []u8 {
     std.debug.assert(cards.len * 2 <= buf.len);
     for (cards, 0..) |card, i| {
-        std.mem.copy(u8, buf[i * 2 .. i * 2 + 2], &card.toRankSuit());
+        @memcpy(buf[i * 2 .. i * 2 + 2], &card.toRankSuit());
     }
     return buf[0 .. cards.len * 2];
 }
@@ -119,7 +119,7 @@ pub fn cardsToString(cards: []const Card, buf: []u8) []u8 {
 pub fn cardsToStringSd(cards: []const Card, buf: []u8) []u8 {
     std.debug.assert(cards.len * 2 <= buf.len);
     for (cards, 0..) |card, i| {
-        std.mem.copy(u8, buf[i * 2 .. i * 2 + 2], &card.toRankSuitSd());
+        @memcpy(buf[i * 2 .. i * 2 + 2], &card.toRankSuitSd());
     }
     return buf[0 .. cards.len * 2];
 }

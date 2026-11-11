@@ -1,40 +1,19 @@
-const std = @import("std");
-const print = std.debug.print;
-
-const Card = @import("card.zig");
-const Rank = @import("rank.zig");
-const ev = @import("evaluator.zig");
-const phe_c = @import("phe.c.zig");
-const ev5 = phe_c.ev5;
-const ev7 = phe_c.ev7;
-const util = @import("util.zig");
-
 const TestCtx = struct {
     hand_idx: usize,
     max_hand_idx: usize = std.math.maxInt(usize),
-    total_time: u64,
-    timer: std.time.Timer,
-    map: Map,
-    rand: std.rand.DefaultPrng,
+    total_time: Io.Duration,
+    map: *Map,
+    rand: std.Random.DefaultPrng,
     pub const Map = std.AutoHashMap(u8, void);
-    pub fn init(map: Map) !TestCtx {
+    pub fn init(map: *Map, io: Io) !TestCtx {
         return TestCtx{
-            .hand_idx = @as(usize, 0),
-            .total_time = @as(u64, 0),
-            .timer = try std.time.Timer.start(),
-            .rand = std.rand.DefaultPrng.init(@as(u64, @bitCast(std.time.milliTimestamp()))),
+            .hand_idx = 0,
+            .total_time = .fromNanoseconds(0),
+            .rand = .init(@intCast(Io.Timestamp.now(io, .cpu_process).toMilliseconds())),
             .map = map,
         };
     }
 };
-
-fn printBencharkInfo(total_time: anytype, hand_idx: usize, ev_fn_name: []const u8) void {
-    // const total_seconds = @intToFloat(f32, total_time) / @intToFloat(f32, std.time.ns_per_s);
-    const total_seconds = @as(f64, @floatFromInt(total_time)) / @as(f64, @floatFromInt(std.time.ns_per_s));
-    const hands_per_s = @as(f64, @floatFromInt(hand_idx)) / total_seconds / 1000;
-    // std.debug.print("total_time {} total_seconds {} hand_idx {}\n", .{ total_time, total_seconds, hand_idx });
-    std.debug.print("{s} cards {d:.1} Khands/s\n", .{ ev_fn_name, hands_per_s });
-}
 
 // compare against c version
 test "validate 5" {
@@ -44,7 +23,7 @@ test "validate 5" {
             _ = ctx;
             const cards = Card.cardsFromIds(5, &ids);
             const actual = ev.evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], 13);
-            const expected = ev5.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
+            const expected = phe_c.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
             try testing.expectEqual(@as(u16, @intCast(expected)), actual.value);
             return true;
         }
@@ -60,7 +39,7 @@ test "validate 7" {
             // const actual = wrap7(evaluate7Cards, 13)(Card.cardsFromIds(7, &ids));
             const cards = Card.cardsFromIds(7, &ids);
             const actual = ev.evaluate7Cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], 13);
-            const expected = ev7.evaluate_7cards(ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]);
+            const expected = phe_c.evaluate_7cards(ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]);
             try testing.expectEqual(@as(u16, @intCast(expected)), actual.value);
             return true;
         }
@@ -68,16 +47,14 @@ test "validate 7" {
     try util.comb7Cb(0, 52, cb, {});
 }
 
-const benchmark_num_trials = 10_000;
-
 test "benchmark 5" {
     // std.log.warn("benchmark 5\n", .{});
-    try benchmark(5, ev.evaluate5Cards, 13, "evaluate5Cards");
+    try benchmark(5, ev.evaluate5Cards, 13, "evaluate5Cards", testing.io);
 }
 
 fn evaluate5CardsC(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, num_ranks: usize) Rank {
     _ = num_ranks;
-    return Rank.init(@as(u16, @intCast(ev5.evaluate_5cards(
+    return Rank.init(@as(u16, @intCast(phe_c.evaluate_5cards(
         @as(c_int, c1.id),
         @as(c_int, c2.id),
         @as(c_int, c3.id),
@@ -87,19 +64,26 @@ fn evaluate5CardsC(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, num_ranks: 
 }
 test "benchmark 5 c" {
     // std.log.warn("benchmark 5 c\n", .{});
-    try benchmark(5, evaluate5CardsC, 13, "evaluate5CardsC");
+    try benchmark(5, evaluate5CardsC, 13, "evaluate5CardsC", testing.io);
 }
 
-fn benchmark(comptime len: usize, evfn: anytype, comptime num_ranks: usize, comptime evfn_name: []const u8) !void {
-    // const is_razz = std.mem.indexOf(u8, evfn_name, "Razz") != null;
+fn printBencharkInfo(total_time: Io.Duration, hand_idx: usize, ev_fn_name: []const u8) void {
+    const total_useconds = @as(f64, @floatFromInt(Io.Duration.fromNanoseconds(total_time.nanoseconds).toMicroseconds()));
+    const hands_per_s: u64 = @intFromFloat(@as(f64, @floatFromInt(hand_idx)) / total_useconds * std.time.us_per_s);
+    std.debug.print("{s: <20} {B:.1} hands/s hands {B:.1} total_time {f}\n", .{ ev_fn_name, hand_idx, hands_per_s, total_time });
+}
+
+const benchmark_num_trials = 100;
+
+fn benchmark(comptime len: usize, evfn: anytype, comptime num_ranks: usize, comptime evfn_name: []const u8, io: Io) !void {
     var map = std.AutoHashMap(u8, void).init(std.heap.c_allocator);
-    var ctx = try TestCtx.init(map);
+    var ctx = try TestCtx.init(&map, io);
     defer ctx.map.deinit();
     try ctx.map.ensureTotalCapacity(len);
     while (ctx.hand_idx < benchmark_num_trials * 1000) : (ctx.hand_idx += 1) {
-        const cards = try randomCardSample(len, &ctx.map, ctx.rand.random(), 0, num_ranks * 4);
+        const cards = try randomCardSample(len, ctx.map, ctx.rand.random(), 0, num_ranks * 4);
         // omaha and shortdeck and razz don't accept num_ranks param
-        var args = if (num_ranks != 9) switch (len) { // non-shortdeck
+        const args = if (num_ranks != 9) switch (len) { // non-shortdeck
             5 => .{ cards[0], cards[1], cards[2], cards[3], cards[4], num_ranks },
             7 => .{ cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], num_ranks },
             9 => .{ cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7], cards[8] },
@@ -109,9 +93,10 @@ fn benchmark(comptime len: usize, evfn: anytype, comptime num_ranks: usize, comp
             7 => .{ cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6] },
             else => return error.InvalidLen,
         };
-        ctx.timer.reset();
+        const time = Io.Timestamp.now(io, .cpu_process);
         const rank = @call(.auto, evfn, args);
-        ctx.total_time += ctx.timer.read();
+        std.mem.doNotOptimizeAway(rank);
+        ctx.total_time.nanoseconds += @intCast(time.untilNow(io, .cpu_process).nanoseconds);
         if (rank.value == 0) return error.InvalidRank;
         ctx.hand_idx += 1;
     }
@@ -120,12 +105,12 @@ fn benchmark(comptime len: usize, evfn: anytype, comptime num_ranks: usize, comp
 
 test "benchmark 7" {
     // std.log.warn("benchmark 7\n", .{});
-    try benchmark(7, ev.evaluate7Cards, 13, "evaluate7Cards");
+    try benchmark(7, ev.evaluate7Cards, 13, "evaluate7Cards", testing.io);
 }
 
 fn evaluate7CardsC(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, c6: Card, c7: Card, num_ranks: usize) Rank {
     _ = num_ranks;
-    return Rank.init(@as(u16, @intCast(ev7.evaluate_7cards(
+    return Rank.init(@as(u16, @intCast(phe_c.evaluate_7cards(
         @as(c_int, c1.id),
         @as(c_int, c2.id),
         @as(c_int, c3.id),
@@ -138,12 +123,12 @@ fn evaluate7CardsC(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, c6: Card, c
 
 test "benchmark 7 c" {
     // std.log.warn("benchmark 7 c\n", .{});
-    try benchmark(7, evaluate7CardsC, 13, "evaluate7CardsC");
+    try benchmark(7, evaluate7CardsC, 13, "evaluate7CardsC", testing.io);
 }
 
 const testing = std.testing;
 
-fn randomCardSample(comptime len: u8, map: *std.AutoHashMap(u8, void), rand: std.rand.Random, low: u8, hi: u8) ![len]Card {
+fn randomCardSample(comptime len: u8, map: *std.AutoHashMap(u8, void), rand: std.Random, low: u8, hi: u8) ![len]Card {
     var result: [len]Card = undefined;
     map.clearRetainingCapacity();
     while (map.count() < len) {
@@ -162,10 +147,10 @@ test "validate omaha" {
     // std.log.warn("validate omaha\n", .{});
     var map = std.AutoHashMap(u8, void).init(std.heap.c_allocator);
     defer map.deinit();
-    var ctx = try TestCtx.init(map);
+    var ctx = try TestCtx.init(&map, testing.io);
     try ctx.map.ensureTotalCapacity(9);
     while (ctx.hand_idx < benchmark_num_trials) : (ctx.hand_idx += 1) {
-        const cards = try randomCardSample(9, &ctx.map, ctx.rand.random(), 0, 52);
+        const cards = try randomCardSample(9, ctx.map, ctx.rand.random(), 0, 52);
         const actual = ev.evaluateOmahaCards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7], cards[8]);
         const expected = phe_c.evaluate_omaha_cards(cards[0].id, cards[1].id, cards[2].id, cards[3].id, cards[4].id, cards[5].id, cards[6].id, cards[7].id, cards[8].id);
         try testing.expectEqual(@as(u16, @intCast(expected)), actual.value);
@@ -174,7 +159,7 @@ test "validate omaha" {
 
 test "benchmark omaha" {
     // std.log.warn("benchmark omaha\n", .{});
-    try benchmark(9, ev.evaluateOmahaCards, 13, "evaluateOmahaCards");
+    try benchmark(9, ev.evaluateOmahaCards, 13, "evaluateOmahaCards", testing.io);
 }
 
 fn evaluateOmahaCardsC(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: Card, h2: Card, h3: Card, h4: Card) Rank {
@@ -193,7 +178,7 @@ fn evaluateOmahaCardsC(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: Car
 
 test "benchmark omaha c" {
     // std.log.warn("benchmark omaha c\n", .{});
-    try benchmark(9, evaluateOmahaCardsC, 13, "evaluateOmahaCards");
+    try benchmark(9, evaluateOmahaCardsC, 13, "evaluateOmahaCardsC", testing.io);
 }
 
 test "holdem" {
@@ -351,12 +336,6 @@ fn islessRkOmaha(comptime l: []const u8, comptime h: []const u8, comptime board:
             .{ l, lr, ld, h, hr, hd, board },
         );
     }
-
-    // if lr[hilo] < hr[hilo] {
-    // 	ld := RankDescription(lr[hilo])
-    // 	hd := RankDescription(hr[hilo])
-    // 	t.Fatalf("{} {} {} should lose to {} {} {} board {}", l, lr, ld, h, hr, hd, board)
-    // }
 }
 
 fn isRankClassOh(c: Rank.Category, comptime h: []const u8, comptime board: []const u8) !void {
@@ -384,7 +363,8 @@ fn makeFlush(comptime ranks: []const u8) [ranks.len * 2]u8 {
 
 fn makeNonFlush(comptime ranks: []const u8) [ranks.len * 2]u8 {
     var res: [ranks.len * 2]u8 = undefined;
-    for (ranks, 0..) |rk, i| std.mem.copy(u8, res[i * 2 .. i * 2 + 2], &[2]u8{ rk, Card.suitToName(@as(u2, @intCast(i % 4))) });
+    for (ranks, 0..) |rk, i|
+        @memcpy(res[i * 2 .. i * 2 + 2], &[2]u8{ rk, Card.suitToName(@as(u2, @intCast(i % 4))) });
     return res;
 }
 
@@ -495,7 +475,7 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
     const cb = struct {
         fn func(ids: [len]u8, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
-            var h2 = randomCardSample(len, &ctx.map, ctx.rand.random(), 0, 36) catch @panic("error in randomCardSample");
+            var h2 = randomCardSample(len, ctx.map, ctx.rand.random(), 0, 36) catch @panic("error in randomCardSample");
 
             const sdrank = if (len == 5) ev.evaluate5Shortdeck(h[0], h[1], h[2], h[3], h[4]) else ev.evaluate7Shortdeck(h[0], h[1], h[2], h[3], h[4], h[5], h[6]);
             const sdrank2 = if (len == 5) ev.evaluate5Shortdeck(h2[0], h2[1], h2[2], h2[3], h2[4]) else ev.evaluate7Shortdeck(h2[0], h2[1], h2[2], h2[3], h2[4], h2[5], h2[6]);
@@ -559,7 +539,7 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
 
     var map = std.AutoHashMap(u8, void).init(std.heap.c_allocator);
     defer map.deinit();
-    var ctx = try TestCtx.init(map);
+    var ctx = try TestCtx.init(&map, testing.io);
     try ctx.map.ensureTotalCapacity(len);
     const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
     try combFn(0, 36, cb, &ctx);
@@ -577,12 +557,12 @@ test "fuzz shortdeck7" {
 
 test "benchmark shortdeck 5" {
     // std.log.warn("benchmark shortdeck 5\n", .{});
-    try benchmark(5, ev.evaluate5Shortdeck, 9, "evaluateShortdeck5");
+    try benchmark(5, ev.evaluate5Shortdeck, 9, "evaluateShortdeck5", testing.io);
 }
 
 test "benchmark shortdeck 7" {
     // std.log.warn("benchmark shortdeck 7\n", .{});
-    try benchmark(7, ev.evaluate7Shortdeck, 9, "evaluateShortdeck7");
+    try benchmark(7, ev.evaluate7Shortdeck, 9, "evaluateShortdeck7", testing.io);
 }
 
 test "razz ev5" {
@@ -611,16 +591,12 @@ test "razz ev5" {
 
 fn razzValidate(comptime len: u8, ev_fn_name: []const u8, cb: anytype) !void {
     _ = ev_fn_name;
-    const evfn = ev.evaluateCardsRazz;
-    _ = evfn;
-    const expected_evfn = ev.evaluateCards;
-    _ = expected_evfn;
-    const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
-
     var map = std.AutoHashMap(u8, void).init(std.heap.c_allocator);
     defer map.deinit();
-    var ctx = try TestCtx.init(map);
+    var ctx = try TestCtx.init(&map, testing.io);
     try ctx.map.ensureTotalCapacity(len);
+    const combFn = if (len == 5) util.comb5Cb else if (len == 7) util.comb7Cb else @panic("unsupported length");
+    if (len == 7) ctx.max_hand_idx = 1_000_000;
     try combFn(0, 52, cb, &ctx);
 }
 
@@ -644,7 +620,7 @@ test "validate razz 5" {
     const cb = struct {
         fn func(ids: [len]u8, ctx: anytype) !bool {
             var h = Card.cardsFromIds(len, &ids);
-            var h2 = randomCardSample(len, &ctx.map, ctx.rand.random(), 0, 36) catch @panic("error in randomCardSample");
+            var h2 = randomCardSample(len, ctx.map, ctx.rand.random(), 0, 36) catch @panic("error in randomCardSample");
 
             const rzrank = evfn(&h);
             ctx.hand_idx += 1;
@@ -742,7 +718,7 @@ fn evaluate5CardsRazzVecWrap(a: Card, b: Card, c: Card, d: Card, e: Card, _: usi
 }
 test "benchmark razz 5" {
     // std.log.warn("benchmark razz 5\n", .{});
-    try benchmark(5, evaluate5CardsRazzVecWrap, 13, "evaluateRazz5Vec");
+    try benchmark(5, evaluate5CardsRazzVecWrap, 13, "evaluateRazz5Vec", testing.io);
 }
 
 fn evaluate7CardsRazzVecWrap(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card, _: usize) Rank {
@@ -751,10 +727,19 @@ fn evaluate7CardsRazzVecWrap(a: Card, b: Card, c: Card, d: Card, e: Card, f: Car
 
 test "benchmark razz 7" {
     // std.log.warn("benchmark razz 7\n", .{});
-    try benchmark(7, evaluate7CardsRazzVecWrap, 13, "evaluateRazz7Vec");
+    try benchmark(7, evaluate7CardsRazzVecWrap, 13, "evaluateRazz7Vec", testing.io);
 }
 
-// pub const io_mode = .evented;
-// pub fn main() !void {
-//     try razzFuzzTest(5, "evaluateCardsRazz", cb);
-// }
+const std = @import("std");
+const print = std.debug.print;
+const Io = std.Io;
+
+const Card = @import("card.zig");
+const Rank = @import("rank.zig");
+const ev = @import("evaluator.zig");
+const phe_c = struct {
+    pub extern fn evaluate_5cards(c_int, c_int, c_int, c_int, c_int) c_int;
+    pub extern fn evaluate_7cards(c_int, c_int, c_int, c_int, c_int, c_int, c_int) c_int;
+    pub extern fn evaluate_omaha_cards(c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int) c_int;
+};
+const util = @import("util.zig");

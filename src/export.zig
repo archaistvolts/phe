@@ -58,10 +58,11 @@ extern "js" fn consoleLog([*]const u8, i32) void;
 extern "js" var mem: [*]u8;
 
 fn debug(comptime fmt: []const u8, args: anytype) void {
-    var cw = std.io.countingWriter(std.io.null_writer);
-    cw.writer().print(fmt, args) catch @panic("unreachable");
-    const buf = allocator.alloc(u8, @intCast(cw.bytes_written)) catch @panic("OOM");
-    const s = std.fmt.bufPrint(buf, fmt, args) catch @panic("OOM");
+    // var cw = std.io.countingWriter(std.io.null_writer);
+    // cw.writer().print(fmt, args) catch @panic("unreachable");
+    // const buf = allocator.alloc(u8, @intCast(cw.bytes_written)) catch @panic("OOM");
+    var buf: [1024]u8 = undefined;
+    const s = std.fmt.bufPrint(&buf, fmt, args) catch @panic("OOM");
     consoleLog(s.ptr, @intCast(s.len));
 }
 
