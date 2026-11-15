@@ -1,6 +1,6 @@
 .{
-    .name = .phe,
-    .version = "0.16.0",
+    .name = .poker_evaluator,
+    .version = "0.1.0",
     .dependencies = .{
         .PokerHandEvaluator = .{
             .url = "git+https://github.com/HenryRLee/PokerHandEvaluator?ref=v0.5.2#0d16808709bd6e3202712d9593de89cd62e15a2a",
@@ -8,5 +8,5 @@
         },
     },
     .paths = .{""},
-    .fingerprint = 0x3b4cc53a143099bc,
+    .fingerprint = 0x2f5e26271532e24d,
 }
