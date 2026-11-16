@@ -31,6 +31,6 @@ pub fn main(init: std.process.Init) !void {
 
 const std = @import("std");
 const mem = std.mem;
-const ev = @import("evaluator");
+const ev = @import("evaluator.zig");
 const phe_c = @import("phe_c.zig");
 const options = @import("build-options");

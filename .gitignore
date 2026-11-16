@@ -2,3 +2,4 @@
 src/PokerHandEvaluator/
 zig-out/
 zig-pkg/
+.junk/

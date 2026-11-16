@@ -10,12 +10,14 @@ pub fn build(b: *std.Build) !void {
     options.addOption(bool, "phe", phe_option);
     options.addOption(u8, "benchN", b.option(u8, "benchN", "number of cards per hand. default 7.") orelse 7);
     options.addOption(u8, "benchR", b.option(u8, "benchR", "number of ranks per suit. default 13.") orelse 13);
+    const strip = b.option(bool, "strip", "strip debug symbols");
 
     const root_mod = b.addModule("evaluator", .{
         .root_source_file = b.path("src/evaluator.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{.{ .name = "build-options", .module = options_mod }},
+        .strip = strip,
     });
 
     const phe_dep = b.dependency("PokerHandEvaluator", .{ .target = target, .optimize = optimize });
@@ -61,6 +63,7 @@ pub fn build(b: *std.Build) !void {
                 .{ .name = "phe", .module = if (phe_option) phe_mod else undefined },
                 .{ .name = "build-options", .module = options_mod },
             },
+            .strip = strip,
         }),
     });
     const benchstep = b.step("bench", "Run a benchmark");
