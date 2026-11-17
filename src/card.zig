@@ -45,12 +45,12 @@ pub fn nameToRank(name: u8) u8 {
     };
 }
 
-pub fn initFromName(name: []const u8) Card {
+pub fn initFromName(name: []const u8) u8 {
     std.debug.assert(name.len == 2);
     // std.debug.warn("name {}\n", .{name});
     const rank = nameToRank(name[0]);
     const suit = nameToSuit(name[1]);
-    return Card{ .id = rank * 4 + suit };
+    return rank * 4 + suit;
 }
 
 pub fn nameToRankSd(name: u8) u8 {
@@ -68,15 +68,15 @@ pub fn nameToRankSd(name: u8) u8 {
     };
 }
 
-pub fn initFromNameSd(name: []const u8) Card {
+pub fn initFromNameSd(name: []const u8) u8 {
     std.debug.assert(name.len == 2);
     const rank: u8 = nameToRankSd(name[0]);
     const suit = nameToSuit(name[1]);
-    return Card{ .id = rank * 4 + suit };
+    return rank * 4 + suit;
 }
 
-pub fn toRankSuit(card: Card) [2]u8 {
-    const rk = card.id >> 2;
+pub fn toRankSuit(card: u8) [2]u8 {
+    const rk = card >> 2;
     std.debug.assert(rk < 13);
     const rank: u8 = switch (rk) {
         0...7 => '2' + rk,
@@ -87,12 +87,12 @@ pub fn toRankSuit(card: Card) [2]u8 {
         12 => 'A',
         else => '?',
     };
-    const suit = suitToName(@as(u2, @intCast(card.id & 0b11)));
+    const suit = suitToName(@as(u2, @intCast(card & 0b11)));
     return [2]u8{ rank, suit };
 }
 
-pub fn toRankSuitSd(card: Card) [2]u8 {
-    const rk = card.id >> 2;
+pub fn toRankSuitSd(card: u8) [2]u8 {
+    const rk = card >> 2;
     std.debug.assert(rk < 9);
     const rank: u8 = switch (rk) {
         0...3 => '6' + rk,
@@ -103,43 +103,35 @@ pub fn toRankSuitSd(card: Card) [2]u8 {
         8 => 'A',
         else => '?',
     };
-    // const st = card.id & 0b11;
-    const suit = suitToName(@as(u2, @intCast(card.id % 4)));
+    const suit = suitToName(@as(u2, @intCast(card % 4)));
     return [2]u8{ rank, suit };
 }
 
-pub fn cardsToString(cards: []const Card, buf: []u8) []u8 {
+pub fn cardsToString(cards: []const u8, buf: []u8) []u8 {
     std.debug.assert(cards.len * 2 <= buf.len);
     for (cards, 0..) |card, i| {
-        @memcpy(buf[i * 2 .. i * 2 + 2], &card.toRankSuit());
+        @memcpy(buf[i * 2 .. i * 2 + 2], &Card.toRankSuit(card));
     }
     return buf[0 .. cards.len * 2];
 }
 
-pub fn cardsToStringSd(cards: []const Card, buf: []u8) []u8 {
+pub fn cardsToStringSd(cards: []const u8, buf: []u8) []u8 {
     std.debug.assert(cards.len * 2 <= buf.len);
     for (cards, 0..) |card, i| {
-        @memcpy(buf[i * 2 .. i * 2 + 2], &card.toRankSuitSd());
+        @memcpy(buf[i * 2 .. i * 2 + 2], &Card.toRankSuitSd(card));
     }
     return buf[0 .. cards.len * 2];
 }
 
-pub fn cardsFromString(comptime len: u8, string: []const u8) [len]Card {
+pub fn cardsFromString(comptime len: u8, string: []const u8) [len]u8 {
     std.debug.assert(string.len == len * 2);
-    var cards: [len]Card = undefined;
+    var cards: [len]u8 = undefined;
     for (&cards, 0..) |*card, i| card.* = initFromName(string[i * 2 .. i * 2 + 2]);
     return cards;
 }
 
-pub fn cardsFromIds(comptime len: u8, ids: []const u8) [len]Card {
-    std.debug.assert(ids.len == len);
-    var result: [len]Card = undefined;
-    for (&result, 0..) |*id, i| id.* = init(ids[i]);
-    return result;
-}
-
-pub fn cardsFromStringSd(comptime len: u8, string: []const u8) [len]Card {
-    var cards: [len]Card = undefined;
+pub fn cardsFromStringSd(comptime len: u8, string: []const u8) [len]u8 {
+    var cards: [len]u8 = undefined;
     for (&cards, 0..) |*card, i| card.* = initFromNameSd(string[i * 2 .. i * 2 + 2]);
     return cards;
 }
@@ -152,15 +144,14 @@ test "round trip ids to string" {
     const cb = struct {
         fn func(ids: [5]u8, ctx: anytype) !bool {
             _ = ctx;
-            var cards = cardsFromIds(5, &ids);
             var buf: [10]u8 = undefined;
-            const hand = cardsToString(cards[0..5], &buf);
+            const hand = cardsToString(ids[0..5], &buf);
             const cards2 = cardsFromString(5, hand);
             var buf2: [10]u8 = undefined;
             const hand2 = cardsToString(cards2[0..5], &buf2);
             try testing.expectEqualSlices(u8, hand, hand2);
             var ids2: [5]u8 = undefined;
-            for (cards2, 0..) |c, i| ids2[i] = c.id;
+            for (cards2, 0..) |c, i| ids2[i] = c;
             try testing.expectEqualSlices(u8, ids[0..], ids2[0..]);
             return true;
         }
@@ -169,9 +160,8 @@ test "round trip ids to string" {
 }
 
 /// 'A' => '2', 'Q' => 'K'
-pub fn toAlo(card: Card) Card {
-    // std.debug.warn("toAlo {} {}\n", .{ card.id, card.id >> 2 });
-    return Card.init((rankToAlo(card.id >> 2) << 2) | (card.id & 0b11));
+pub fn toAlo(card: u8) u8 {
+    return (rankToAlo(card >> 2) << 2) | (card & 0b11);
 }
 
 test "toAlo" {
@@ -199,9 +189,9 @@ pub fn rankToAlo(rank: u8) u8 {
     return (rank + 1) % 13;
 }
 
-pub fn cardsToAlo(comptime len: u8, cards: []const Card) [len]Card {
+pub fn cardsToAlo(comptime len: u8, cards: []const u8) [len]u8 {
     std.debug.assert(cards.len == len);
-    var result: [len]Card = undefined;
+    var result: [len]u8 = undefined;
     comptime var i: u8 = 0;
     inline while (i < len) : (i += 1) result[i] = toAlo(cards[i]);
     return result;

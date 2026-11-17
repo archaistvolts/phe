@@ -52,33 +52,31 @@ pub const suitbit_by_id = [_]u16{
     0x1, 0x8, 0x40, 0x200,
 };
 
-pub fn evaluate5Hand(hand: []const u8, comptime num_ranks: u8) Rank {
+pub fn evaluate5Hand(hand: []const u8, comptime R: u8) Rank {
     std.debug.assert(hand.len == 10);
-    var cards: [5]Card = undefined;
+    var cards: [5]u8 = undefined;
     for (&cards, 0..) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
-    return evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], num_ranks);
+    return evaluate5Cards(R, cards);
 }
 
-pub fn evaluate7Hand(hand: []const u8, comptime num_ranks: u8) Rank {
+pub fn evaluate7Hand(hand: []const u8, comptime R: u8) Rank {
     std.debug.assert(hand.len == 14);
-    var cards: [7]Card = undefined;
+    var cards: [7]u8 = undefined;
     for (&cards, 0..) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
-    return evaluate7Cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], num_ranks);
+    return evaluate7Cards(R, cards);
 }
 
 pub fn evaluateOmahaHand(hand: []const u8) Rank {
     std.debug.assert(hand.len == 18);
-    var cards: [9]Card = undefined;
+    var cards: [9]u8 = undefined;
     for (&cards, 0..) |*card, i| card.* = Card.initFromName(hand[i * 2 .. i * 2 + 2]);
-    return evaluateOmahaCards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], cards[7], cards[8]);
+    return evaluateOmahaCards(cards);
 }
 
-pub fn evaluateCards(cards: []const Card, comptime num_ranks: u8) Rank {
-    // for (cards) |c| warn("{}, ", .{c.id});
-    // warn("\n", .{});
+pub fn evaluateCards(N: comptime_int, R: comptime_int, cards: [N]u8) Rank {
     return switch (cards.len) {
-        5 => evaluate5Cards(cards[0], cards[1], cards[2], cards[3], cards[4], num_ranks),
-        7 => evaluate7Cards(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6], num_ranks),
+        5 => evaluate5Cards(R, cards),
+        7 => evaluate7Cards(R, cards),
         else => @panic("only 5 and 7 card hands supported"),
     };
 }
@@ -87,75 +85,75 @@ pub fn evaluateCards(cards: []const Card, comptime num_ranks: u8) Rank {
 // The rest of it represent the rank, ranged from 0-12.
 // 13 * 4 gives 52 ids.
 //
-pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, comptime num_ranks: u8) Rank {
+pub fn evaluate5Cards(R: comptime_int, cards: [5]u8) Rank {
     var suit_hash: u16 = 0;
-    suit_hash += suitbit_by_id[a.id];
-    suit_hash += suitbit_by_id[b.id];
-    suit_hash += suitbit_by_id[c.id];
-    suit_hash += suitbit_by_id[d.id];
-    suit_hash += suitbit_by_id[e.id];
+    suit_hash += suitbit_by_id[cards[0]];
+    suit_hash += suitbit_by_id[cards[1]];
+    suit_hash += suitbit_by_id[cards[2]];
+    suit_hash += suitbit_by_id[cards[3]];
+    suit_hash += suitbit_by_id[cards[4]];
 
     const suit = suits[suit_hash];
     if (suit != 0) {
         var suit_binary: [4]u16 = @splat(0);
-        suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
-        suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
-        suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
-        suit_binary[d.id & 0x3] |= binaries_by_id[d.id];
-        suit_binary[e.id & 0x3] |= binaries_by_id[e.id];
+        suit_binary[cards[0] & 0x3] |= binaries_by_id[cards[0]];
+        suit_binary[cards[1] & 0x3] |= binaries_by_id[cards[1]];
+        suit_binary[cards[2] & 0x3] |= binaries_by_id[cards[2]];
+        suit_binary[cards[3] & 0x3] |= binaries_by_id[cards[3]];
+        suit_binary[cards[4] & 0x3] |= binaries_by_id[cards[4]];
         return Rank{ .value = flush[suit_binary[suit - 1]] };
     }
 
     var quinary: [13]u8 = @splat(0);
-    quinary[a.id >> 2] += 1;
-    quinary[b.id >> 2] += 1;
-    quinary[c.id >> 2] += 1;
-    quinary[d.id >> 2] += 1;
-    quinary[e.id >> 2] += 1;
+    quinary[cards[0] >> 2] += 1;
+    quinary[cards[1] >> 2] += 1;
+    quinary[cards[2] >> 2] += 1;
+    quinary[cards[3] >> 2] += 1;
+    quinary[cards[4] >> 2] += 1;
 
-    const hash = hashQuinary(&quinary, num_ranks, 5);
+    const hash = hashQuinary(&quinary, R, 5);
 
     return Rank{ .value = noflush5[hash] };
 }
 
-pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card, comptime num_ranks: u8) Rank {
+pub fn evaluate7Cards(R: comptime_int, cards: [7]u8) Rank {
     var suit_hash: u16 = 0;
 
-    suit_hash += suitbit_by_id[a.id];
-    suit_hash += suitbit_by_id[b.id];
-    suit_hash += suitbit_by_id[c.id];
-    suit_hash += suitbit_by_id[d.id];
-    suit_hash += suitbit_by_id[e.id];
-    suit_hash += suitbit_by_id[f.id];
-    suit_hash += suitbit_by_id[g.id];
+    suit_hash += suitbit_by_id[cards[0]];
+    suit_hash += suitbit_by_id[cards[1]];
+    suit_hash += suitbit_by_id[cards[2]];
+    suit_hash += suitbit_by_id[cards[3]];
+    suit_hash += suitbit_by_id[cards[4]];
+    suit_hash += suitbit_by_id[cards[5]];
+    suit_hash += suitbit_by_id[cards[6]];
 
     const suit = suits[suit_hash];
 
     if (suit != 0) {
         var suit_binary: [4]u16 = @splat(0);
 
-        suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
-        suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
-        suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
-        suit_binary[d.id & 0x3] |= binaries_by_id[d.id];
-        suit_binary[e.id & 0x3] |= binaries_by_id[e.id];
-        suit_binary[f.id & 0x3] |= binaries_by_id[f.id];
-        suit_binary[g.id & 0x3] |= binaries_by_id[g.id];
+        suit_binary[cards[0] & 0x3] |= binaries_by_id[cards[0]];
+        suit_binary[cards[1] & 0x3] |= binaries_by_id[cards[1]];
+        suit_binary[cards[2] & 0x3] |= binaries_by_id[cards[2]];
+        suit_binary[cards[3] & 0x3] |= binaries_by_id[cards[3]];
+        suit_binary[cards[4] & 0x3] |= binaries_by_id[cards[4]];
+        suit_binary[cards[5] & 0x3] |= binaries_by_id[cards[5]];
+        suit_binary[cards[6] & 0x3] |= binaries_by_id[cards[6]];
 
         return Rank{ .value = flush[suit_binary[suit - 1]] };
     }
 
     var quinary: [13]u8 = @splat(0);
 
-    quinary[a.id >> 2] += 1;
-    quinary[b.id >> 2] += 1;
-    quinary[c.id >> 2] += 1;
-    quinary[d.id >> 2] += 1;
-    quinary[e.id >> 2] += 1;
-    quinary[f.id >> 2] += 1;
-    quinary[g.id >> 2] += 1;
+    quinary[cards[0] >> 2] += 1;
+    quinary[cards[1] >> 2] += 1;
+    quinary[cards[2] >> 2] += 1;
+    quinary[cards[3] >> 2] += 1;
+    quinary[cards[4] >> 2] += 1;
+    quinary[cards[5] >> 2] += 1;
+    quinary[cards[6] >> 2] += 1;
 
-    const hash = hashQuinary(&quinary, num_ranks, 7);
+    const hash = hashQuinary(&quinary, R, 7);
 
     return Rank{ .value = noflush7[hash] };
 }
@@ -204,39 +202,40 @@ pub fn hashBinary(binary: u16, comptime len: u8, k_: u8) u32 {
 // The first five parameters are the community cards on the board
 // The last four parameters are the hole cards of the player
 //
-pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: Card, h2: Card, h3: Card, h4: Card) Rank {
+pub fn evaluateOmahaCards(board_hole_cards: [9]u8) Rank {
     var value_flush: u16 = 10000;
     var value_noflush: u16 = 10000;
     var suit_count_board: [4]u8 = @splat(0);
     var suit_count_hole: [4]u8 = @splat(0);
+    const c1, const c2, const c3, const c4, const c5, const h1, const h2, const h3, const h4 = board_hole_cards;
 
-    suit_count_board[c1.id & 0x3] += 1;
-    suit_count_board[c2.id & 0x3] += 1;
-    suit_count_board[c3.id & 0x3] += 1;
-    suit_count_board[c4.id & 0x3] += 1;
-    suit_count_board[c5.id & 0x3] += 1;
+    suit_count_board[c1 & 0x3] += 1;
+    suit_count_board[c2 & 0x3] += 1;
+    suit_count_board[c3 & 0x3] += 1;
+    suit_count_board[c4 & 0x3] += 1;
+    suit_count_board[c5 & 0x3] += 1;
 
-    suit_count_hole[h1.id & 0x3] += 1;
-    suit_count_hole[h2.id & 0x3] += 1;
-    suit_count_hole[h3.id & 0x3] += 1;
-    suit_count_hole[h4.id & 0x3] += 1;
+    suit_count_hole[h1 & 0x3] += 1;
+    suit_count_hole[h2 & 0x3] += 1;
+    suit_count_hole[h3 & 0x3] += 1;
+    suit_count_hole[h4 & 0x3] += 1;
 
     var i: u8 = 0;
     while (i < 4) : (i += 1) {
         if (suit_count_board[i] >= 3 and suit_count_hole[i] >= 2) {
             var suit_binary_board: [4]u16 = @splat(0);
 
-            suit_binary_board[c1.id & 0x3] |= binaries_by_id[c1.id];
-            suit_binary_board[c2.id & 0x3] |= binaries_by_id[c2.id];
-            suit_binary_board[c3.id & 0x3] |= binaries_by_id[c3.id];
-            suit_binary_board[c4.id & 0x3] |= binaries_by_id[c4.id];
-            suit_binary_board[c5.id & 0x3] |= binaries_by_id[c5.id];
+            suit_binary_board[c1 & 0x3] |= binaries_by_id[c1];
+            suit_binary_board[c2 & 0x3] |= binaries_by_id[c2];
+            suit_binary_board[c3 & 0x3] |= binaries_by_id[c3];
+            suit_binary_board[c4 & 0x3] |= binaries_by_id[c4];
+            suit_binary_board[c5 & 0x3] |= binaries_by_id[c5];
 
             var suit_binary_hole: [4]u16 = @splat(0);
-            suit_binary_hole[h1.id & 0x3] |= binaries_by_id[h1.id];
-            suit_binary_hole[h2.id & 0x3] |= binaries_by_id[h2.id];
-            suit_binary_hole[h3.id & 0x3] |= binaries_by_id[h3.id];
-            suit_binary_hole[h4.id & 0x3] |= binaries_by_id[h4.id];
+            suit_binary_hole[h1 & 0x3] |= binaries_by_id[h1];
+            suit_binary_hole[h2 & 0x3] |= binaries_by_id[h2];
+            suit_binary_hole[h3 & 0x3] |= binaries_by_id[h3];
+            suit_binary_hole[h4 & 0x3] |= binaries_by_id[h4];
 
             if (suit_count_board[i] == 3 and suit_count_hole[i] == 2) {
                 value_flush = flush[suit_binary_board[i] | suit_binary_hole[i]];
@@ -259,16 +258,16 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
     var quinary_board: [13]u8 = @splat(0);
     var quinary_hole: [13]u8 = @splat(0);
 
-    quinary_board[c1.id >> 2] += 1;
-    quinary_board[c2.id >> 2] += 1;
-    quinary_board[c3.id >> 2] += 1;
-    quinary_board[c4.id >> 2] += 1;
-    quinary_board[c5.id >> 2] += 1;
+    quinary_board[c1 >> 2] += 1;
+    quinary_board[c2 >> 2] += 1;
+    quinary_board[c3 >> 2] += 1;
+    quinary_board[c4 >> 2] += 1;
+    quinary_board[c5 >> 2] += 1;
 
-    quinary_hole[h1.id >> 2] += 1;
-    quinary_hole[h2.id >> 2] += 1;
-    quinary_hole[h3.id >> 2] += 1;
-    quinary_hole[h4.id >> 2] += 1;
+    quinary_hole[h1 >> 2] += 1;
+    quinary_hole[h2 >> 2] += 1;
+    quinary_hole[h3 >> 2] += 1;
+    quinary_hole[h4 >> 2] += 1;
 
     const board_hash = hashQuinary(&quinary_board, 13, 5);
     const hole_hash = hashQuinary(&quinary_hole, 13, 4);
@@ -282,32 +281,33 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
 // The two least significant bits represent the suit, ranged from 0-3.
 // The rest of it represent the rank, ranged from 0-8.
 // 9 * 4 gives 36 ids.
-pub fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
+pub fn evaluate5Shortdeck(cards: [5]u8) Rank {
     var suit_hash: u16 = 0;
-    suit_hash += suitbit_by_id[a.id];
-    suit_hash += suitbit_by_id[b.id];
-    suit_hash += suitbit_by_id[c.id];
-    suit_hash += suitbit_by_id[d.id];
-    suit_hash += suitbit_by_id[e.id];
+    const a, const b, const c, const d, const e = cards;
+    suit_hash += suitbit_by_id[a];
+    suit_hash += suitbit_by_id[b];
+    suit_hash += suitbit_by_id[c];
+    suit_hash += suitbit_by_id[d];
+    suit_hash += suitbit_by_id[e];
 
     const suit = suits[suit_hash];
     if (suit != 0) {
         var suit_binary: [4]u16 = @splat(0);
-        suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
-        suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
-        suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
-        suit_binary[d.id & 0x3] |= binaries_by_id[d.id];
-        suit_binary[e.id & 0x3] |= binaries_by_id[e.id];
+        suit_binary[a & 0x3] |= binaries_by_id[a];
+        suit_binary[b & 0x3] |= binaries_by_id[b];
+        suit_binary[c & 0x3] |= binaries_by_id[c];
+        suit_binary[d & 0x3] |= binaries_by_id[d];
+        suit_binary[e & 0x3] |= binaries_by_id[e];
         // std.debug.warn("suit_binary[suit - 1] {}\n", .{suit_binary[suit - 1]});
         return Rank{ .value = flush_sd5[suit_binary[suit - 1]] };
     }
 
     var quinary: [9]u8 = @splat(0);
-    quinary[a.id >> 2] += 1;
-    quinary[b.id >> 2] += 1;
-    quinary[c.id >> 2] += 1;
-    quinary[d.id >> 2] += 1;
-    quinary[e.id >> 2] += 1;
+    quinary[a >> 2] += 1;
+    quinary[b >> 2] += 1;
+    quinary[c >> 2] += 1;
+    quinary[d >> 2] += 1;
+    quinary[e >> 2] += 1;
 
     const hash = hashQuinary(&quinary, 9, 5);
 
@@ -318,79 +318,81 @@ pub fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
 // The two least significant bits represent the suit, ranged from 0-3.
 // The rest of it represent the rank, ranged from 0-8.
 // 9 * 4 gives 36 ids.
-pub fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
+pub fn evaluate7Shortdeck(cards: [7]u8) Rank {
+    const a, const b, const c, const d, const e, const f, const g = cards;
     var suit_hash: u16 = 0;
-    suit_hash += suitbit_by_id[a.id];
-    suit_hash += suitbit_by_id[b.id];
-    suit_hash += suitbit_by_id[c.id];
-    suit_hash += suitbit_by_id[d.id];
-    suit_hash += suitbit_by_id[e.id];
-    suit_hash += suitbit_by_id[f.id];
-    suit_hash += suitbit_by_id[g.id];
+    suit_hash += suitbit_by_id[a];
+    suit_hash += suitbit_by_id[b];
+    suit_hash += suitbit_by_id[c];
+    suit_hash += suitbit_by_id[d];
+    suit_hash += suitbit_by_id[e];
+    suit_hash += suitbit_by_id[f];
+    suit_hash += suitbit_by_id[g];
 
     const suit = suits[suit_hash];
     if (suit != 0) {
         var suit_binary: [4]u16 = @splat(0);
-        suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
-        suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
-        suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
-        suit_binary[d.id & 0x3] |= binaries_by_id[d.id];
-        suit_binary[e.id & 0x3] |= binaries_by_id[e.id];
-        suit_binary[f.id & 0x3] |= binaries_by_id[f.id];
-        suit_binary[g.id & 0x3] |= binaries_by_id[g.id];
+        suit_binary[a & 0x3] |= binaries_by_id[a];
+        suit_binary[b & 0x3] |= binaries_by_id[b];
+        suit_binary[c & 0x3] |= binaries_by_id[c];
+        suit_binary[d & 0x3] |= binaries_by_id[d];
+        suit_binary[e & 0x3] |= binaries_by_id[e];
+        suit_binary[f & 0x3] |= binaries_by_id[f];
+        suit_binary[g & 0x3] |= binaries_by_id[g];
         return Rank{ .value = flush_sd7[suit_binary[suit - 1]] };
     }
 
     var quinary: [9]u8 = @splat(0);
-    quinary[a.id >> 2] += 1;
-    quinary[b.id >> 2] += 1;
-    quinary[c.id >> 2] += 1;
-    quinary[d.id >> 2] += 1;
-    quinary[e.id >> 2] += 1;
-    quinary[f.id >> 2] += 1;
-    quinary[g.id >> 2] += 1;
+    quinary[a >> 2] += 1;
+    quinary[b >> 2] += 1;
+    quinary[c >> 2] += 1;
+    quinary[d >> 2] += 1;
+    quinary[e >> 2] += 1;
+    quinary[f >> 2] += 1;
+    quinary[g >> 2] += 1;
 
     const hash = hashQuinary(&quinary, 9, 7);
 
     return Rank{ .value = noflush_sd7[hash] };
 }
 
-pub fn evaluateCardsShortdeck(cards: []const Card) Rank {
+pub fn evaluateCardsShortdeck(cards: []const u8) Rank {
     return switch (cards.len) {
-        5 => evaluate5Shortdeck(cards[0], cards[1], cards[2], cards[3], cards[4]),
-        7 => evaluate7Shortdeck(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6]),
+        5 => evaluate5Shortdeck(cards[0..5].*),
+        7 => evaluate7Shortdeck(cards[0..7].*),
         else => @panic("only 5 and 7 card hands supported"),
     };
 }
 
-pub fn cardsToBinary(cards: []const Card) u16 {
+pub fn cardsToBinary(cards: []const u8) u16 {
     var result: u16 = 0;
-    for (cards) |card| result |= binaries_by_id[card.id];
+    for (cards) |card| result |= binaries_by_id[card];
     return result;
 }
 
-pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
+pub fn evaluate5CardsRazz(cards: [5]u8) Rank {
+    const a, const b, const c, const d, const e = cards;
     var quinary: [13]u8 = @splat(0);
-    quinary[Card.rankToAlo(a.id >> 2)] += 1;
-    quinary[Card.rankToAlo(b.id >> 2)] += 1;
-    quinary[Card.rankToAlo(c.id >> 2)] += 1;
-    quinary[Card.rankToAlo(d.id >> 2)] += 1;
-    quinary[Card.rankToAlo(e.id >> 2)] += 1;
+    quinary[Card.rankToAlo(a >> 2)] += 1;
+    quinary[Card.rankToAlo(b >> 2)] += 1;
+    quinary[Card.rankToAlo(c >> 2)] += 1;
+    quinary[Card.rankToAlo(d >> 2)] += 1;
+    quinary[Card.rankToAlo(e >> 2)] += 1;
     const hash = hashQuinary(&quinary, 13, 5);
     // warn("hash {} hashtable_razz5[hash] {}\n", .{ hash, hashtable_razz5[hash] });
 
     return Rank.init(hashtable_razz5[hash]);
 }
 
-pub fn evaluate7CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
+pub fn evaluate7CardsRazz(cards: [7]u8) Rank {
     var quinary: [13]u8 = @splat(0);
-    quinary[Card.rankToAlo(a.id >> 2)] += 1;
-    quinary[Card.rankToAlo(b.id >> 2)] += 1;
-    quinary[Card.rankToAlo(c.id >> 2)] += 1;
-    quinary[Card.rankToAlo(d.id >> 2)] += 1;
-    quinary[Card.rankToAlo(e.id >> 2)] += 1;
-    quinary[Card.rankToAlo(f.id >> 2)] += 1;
-    quinary[Card.rankToAlo(g.id >> 2)] += 1;
+    quinary[Card.rankToAlo(cards[0] >> 2)] += 1;
+    quinary[Card.rankToAlo(cards[1] >> 2)] += 1;
+    quinary[Card.rankToAlo(cards[2] >> 2)] += 1;
+    quinary[Card.rankToAlo(cards[3] >> 2)] += 1;
+    quinary[Card.rankToAlo(cards[4] >> 2)] += 1;
+    quinary[Card.rankToAlo(cards[5] >> 2)] += 1;
+    quinary[Card.rankToAlo(cards[6] >> 2)] += 1;
     const hash = hashQuinary(&quinary, 13, 7);
     // warn("hash {} hashtable_razz5[hash] {}\n", .{ hash, hashtable_razz5[hash] });
 
@@ -399,8 +401,8 @@ pub fn evaluate7CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, 
 
 // TODO: replace with Vector(5, u8) once https://github.com/ziglang/zig/issues/3246 is resolved
 const u8x5 = @Vector(5, u8);
-pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
-    var ranks = u8x5{ a.id, b.id, c.id, d.id, e.id };
+pub fn evaluate5CardsRazzVec(cards: [5]u8) Rank {
+    var ranks: u8x5 = cards;
     ranks >>= @splat(@as(u3, 2));
     ranks += @splat(@as(u8, 1));
     ranks %= @splat(@as(u8, 13));
@@ -414,18 +416,18 @@ pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
 }
 
 // evaluate the given 5 card hand and return a score from 0..6175
-pub fn evaluateCardsRazz(cards: []const Card) Rank {
+pub fn evaluateCardsRazz(cards: []const u8) Rank {
     return switch (cards.len) {
-        5 => evaluate5CardsRazzVec(cards[0], cards[1], cards[2], cards[3], cards[4]),
-        7 => evaluate7CardsRazzVec(cards[0], cards[1], cards[2], cards[3], cards[4], cards[5], cards[6]),
+        5 => evaluate5CardsRazzVec(cards[0..5].*),
+        7 => evaluate7CardsRazzVec(cards[0..7].*),
         else => std.debug.panic("invalid cards length: {}", .{cards.len}),
     };
 }
 
 // TODO: replace with Vector(7, u8) once https://github.com/ziglang/zig/issues/3246 is resolved
 const u8x7 = @Vector(7, u8);
-pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
-    var ranks = u8x7{ a.id, b.id, c.id, d.id, e.id, f.id, g.id };
+pub fn evaluate7CardsRazzVec(cards: [7]u8) Rank {
+    var ranks: u8x7 = cards;
     ranks >>= @splat(@as(u3, 2));
     ranks += @splat(@as(u8, 1));
     ranks %= @splat(@as(u8, 13));
@@ -444,13 +446,13 @@ pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Car
 //     const alo_cards = Card.cardsToAlo(7, cards);
 //     // for (alo_cards) |c| warn("alo c {}\n", .{c});
 //     var quinary = [1]u8{0} ** 13;
-//     quinary[alo_cards[0].id >> 2] += 1;
-//     quinary[alo_cards[1].id >> 2] += 1;
-//     quinary[alo_cards[2].id >> 2] += 1;
-//     quinary[alo_cards[3].id >> 2] += 1;
-//     quinary[alo_cards[4].id >> 2] += 1;
-//     quinary[alo_cards[5].id >> 2] += 1;
-//     quinary[alo_cards[6].id >> 2] += 1;
+//     quinary[alo_cards[0] >> 2] += 1;
+//     quinary[alo_cards[1] >> 2] += 1;
+//     quinary[alo_cards[2] >> 2] += 1;
+//     quinary[alo_cards[3] >> 2] += 1;
+//     quinary[alo_cards[4] >> 2] += 1;
+//     quinary[alo_cards[5] >> 2] += 1;
+//     quinary[alo_cards[6] >> 2] += 1;
 //     const hash = hashQuinary(&quinary, 13, 7);
 //     // warn("hash {}\n", .{hash});
 
