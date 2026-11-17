@@ -83,7 +83,7 @@ pub fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
     const NFLUSH_MASKS = N + 1 - 5; // how many suits to check. 3 when N=7 - flush suit must appear in first 3.
 
     var ranksuits: [R]u8 = @splat(0); // suit bitsets for each rank
-    var ranksmask: uR = 0;
+    var ranksmask: uR = 0; // all ranks
     var suitmasks: [4]uR = @splat(0);
     inline for (0..N) |i| {
         const rank = cards[i] >> 2;
@@ -94,8 +94,9 @@ pub fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
         ranksuits[rank] |= @as(u8, 1) << @truncate(suit);
     }
 
-    var flushmask: uR = 0;
+    var flushmask: uR = 0; // benchmaks show simd slower than this loop
     inline for (0..NFLUSH_MASKS) |i| {
+        comptime assert(N < 10); // assumes only 1 flush possible in N cards
         const suit = cards[i] & 0b11;
         const suitsmatch = suitmasks[suit];
         if (@popCount(suitsmatch) > 4) {
@@ -134,6 +135,7 @@ pub fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
     } else if (highestStraight(uR, ranksmask)) |r|
         .init(.straight, r, 0)
     else rank: {
+        // benchmarks show simd speedup here vs scalar inline loop
         const rankcounts = @popCount(@as(u8xR, ranksuits));
         const single: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(1)))));
         const pair: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(2)))));

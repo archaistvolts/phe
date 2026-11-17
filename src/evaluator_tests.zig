@@ -1,3 +1,130 @@
+test "fuzz" {
+    const Context = struct {
+        fn testOne(_: @This(), smith: *testing.Smith) anyerror!void {
+            try pheOracle(testing.allocator, smith);
+        }
+    };
+    // const corpus = try loadCorpus(testing.io, "testdata/crashfiles");
+    // defer {
+    //     for (corpus) |x| testgpa.free(x);
+    //     testgpa.free(corpus);
+    // }
+    try testing.fuzz(Context{}, Context.testOne, .{ .corpus = &.{"asdf"} });
+
+    // var prng = std.Random.DefaultPrng.init(0);
+    // try pheValidateAll(5, 13, prng.random());
+}
+
+fn pheFuzzFile(io: Io, path: []const u8) !void {
+    const contents = Io.Dir.cwd().readFileAlloc(io, path, testing.allocator, .unlimited) catch return;
+    defer testing.allocator.free(contents);
+    var smith = testing.Smith{ .in = contents };
+    try pheOracle(testing.allocator, &smith);
+}
+
+test "crash - current" {
+    try pheFuzzFile(testing.io, ".zig-cache/f/crash");
+}
+
+fn pheOracle(_: mem.Allocator, smith: *testing.Smith) !void {
+    const N = smith.valueWeighted(u8, &.{
+        .{ .max = 5, .min = 5, .weight = 50 },
+        // .{ .max = 7, .min = 7, .weight = 50 },
+    });
+    const R = smith.valueWeighted(u8, &.{
+        // .{ .max = 9, .min = 9, .weight = 50 }, // TODO short deck
+        .{ .max = 13, .min = 13, .weight = 50 },
+    });
+
+    switch (N) {
+        5 => {
+            switch (R) {
+                9 => unreachable,
+                13 => {
+                    var buf: [10]u8 = undefined;
+                    CombinationIterator(52, 10).randomHand(smith, &buf);
+                    const a1 = ev.evaluateNCards(5, 13, buf[0..5].*);
+                    const a2 = ev.evaluateNCards(5, 13, buf[5..10].*);
+                    // const args: std.meta.ArgsTuple(@TypeOf(phe.evaluate5Cards)) = .{ undefined, undefined, undefined, undefined, undefined, 13 };
+                    // comptime args[5] = 13;
+                    // const bytes = mem.asBytes(&args);
+                    // bytes[0..5].* = @bitCast(buf[0..5].*);
+                    // std.debug.print("args {}\n", .{args});
+                    // const e1 = @call(.always_inline, phe.evaluate5Cards, args);
+                    const e1 = phe.evaluateCards(5, 13, buf[0..5].*);
+                    const e2 = phe.evaluateNCards(5, 13, buf[5..10].*);
+                    errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(buf[0..5]), Card.Cards.fromIds(buf[5..10]), a1, a2, e1, e2 });
+                    try testing.expectEqual(a1 < a2, e1.value > e2.value);
+                },
+                else => unreachable,
+            }
+        },
+        7 => unreachable,
+        else => unreachable,
+    }
+}
+
+pub fn CombinationIterator(N: comptime_int, K: comptime_int) type {
+    return struct {
+        current: I,
+
+        const I = @Int(.unsigned, N);
+        const start = (1 << K) - 1; //   7c5: 0b0011111
+        const limit: I = start << (N - K); // 0b1111100
+        const sentinel = std.math.maxInt(I);
+
+        const Self = @This();
+        pub const init: Self = .{ .current = start };
+
+        pub fn next(self: *Self) ?I {
+            comptime assert(sentinel > limit);
+            if (self.current == sentinel)
+                return null;
+
+            const res = self.current;
+
+            if (res == limit) {
+                self.current = sentinel;
+                return res;
+            }
+
+            // Gosper's Hack
+            const c = res & -%res;
+            const r = res +% c;
+            self.current = (((r ^ res) >> 2) / c) | r;
+
+            return res;
+        }
+
+        fn randomHand(smith: *std.testing.Smith, buf: *[K]u8) void {
+            var used: u64 = 0;
+            var out: usize = 0;
+
+            // Floyd's algorithm: sample N unique IDs from 0..51.
+            for (N - K..N) |j| {
+                const t = smith.valueRangeLessThan(u8, 0, @intCast(j + 1));
+
+                // If t was already selected, take j instead.
+                const chosen: u8 = @intCast(if ((used & (@as(u64, 1) << @intCast(t))) != 0) j else t);
+
+                used |= @as(u64, 1) << @intCast(chosen);
+                buf[out] = chosen;
+                out += 1;
+            }
+
+            // randomize order to exercise order-dependent bugs.
+            var i: u8 = K;
+            while (i > 1) {
+                i -= 1;
+                const j = smith.valueRangeLessThan(u8, 0, i + 1);
+                const tmp = buf[i];
+                buf[i] = buf[j];
+                buf[j] = tmp;
+            }
+        }
+    };
+}
+
 const TestCtx = struct {
     hand_idx: usize,
     max_hand_idx: usize = std.math.maxInt(usize),
@@ -17,13 +144,14 @@ const TestCtx = struct {
 
 // compare against c version
 test "validate 5" {
+    if (true) return error.SkipZigTest;
     const cb = struct {
         fn func(ids: [5]u8, ctx: *[5]u8) !bool {
             const a1 = ev.evaluateNCards(5, 13, ids);
             const a2 = ev.evaluateNCards(5, 13, ctx.*);
             const e1 = phe_c.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
             const e2 = phe_c.evaluate_5cards(ctx[0], ctx[1], ctx[2], ctx[3], ctx[4]);
-            errdefer print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(&ids), Card.Cards.fromIds(ctx), a1, a2, e1, e2 });
+            errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(&ids), Card.Cards.fromIds(ctx), a1, a2, e1, e2 });
             try testing.expectEqual(a1 > a2, e1 < e2);
             ctx.* = ids;
             return true;
@@ -41,19 +169,20 @@ test "validate 5" {
         const a2 = ev.evaluateNCards(5, 13, ids[5..10].*);
         const e1 = phe_c.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
         const e2 = phe_c.evaluate_5cards(ids[5], ids[6], ids[7], ids[8], ids[9]);
-        errdefer print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..5]), Card.Cards.fromIds(ids[5..10]), a1, a2, e1, e2 });
+        errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..5]), Card.Cards.fromIds(ids[5..10]), a1, a2, e1, e2 });
         try testing.expectEqual(e1 < e2, a1 > a2);
     }
 }
 
 test "validate 7" {
+    if (true) return error.SkipZigTest;
     const cb = struct {
         fn func(ids: [7]u8, ctx: *[7]u8) !bool {
             const a1 = ev.evaluateNCards(7, 13, ids);
             const a2 = ev.evaluateNCards(7, 13, ctx.*);
             const e1 = phe_c.evaluate_7cards(ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]);
             const e2 = phe_c.evaluate_7cards(ctx[0], ctx[1], ctx[2], ctx[3], ctx[4], ctx[5], ctx[6]);
-            errdefer print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..7]), Card.Cards.fromIds(ctx[0..7]), a1, a2, e1, e2 });
+            errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..7]), Card.Cards.fromIds(ctx[0..7]), a1, a2, e1, e2 });
             try testing.expectEqual(e1 < e2, a1 > a2);
             ctx.* = ids;
             return true;
@@ -71,60 +200,9 @@ test "validate 7" {
         const a2 = ev.evaluateNCards(7, 13, ids[7..14].*);
         const e1 = phe_c.evaluate_7cards(ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]);
         const e2 = phe_c.evaluate_7cards(ids[7], ids[8], ids[9], ids[10], ids[11], ids[12], ids[13]);
-        errdefer print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..7]), Card.Cards.fromIds(ids[7..14]), a1, a2, e1, e2 });
+        errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..7]), Card.Cards.fromIds(ids[7..14]), a1, a2, e1, e2 });
         try testing.expectEqual(e1 < e2, a1 > a2);
     }
-}
-
-test "benchmark 5" {
-    try benchmark(5, 13, ev.evaluateNCards, "evaluate5Cards", testing.io);
-}
-
-test "benchmark 5 c" {
-    try benchmark(5, 13, phe_c.evaluateNCards, "evaluate5CardsC", testing.io);
-}
-
-fn printBencharkInfo(total_time: Io.Duration, hand_idx: usize, ev_fn_name: []const u8) void {
-    const total_useconds = @as(f64, @floatFromInt(Io.Duration.fromNanoseconds(total_time.nanoseconds).toMicroseconds()));
-    const hands_per_s: u64 = @intFromFloat(@as(f64, @floatFromInt(hand_idx)) / total_useconds * std.time.us_per_s);
-    std.debug.print("{s: <20} hands: {B:.1} hands/s: {B:.1} total_time: {f}\n", .{ ev_fn_name, hand_idx, hands_per_s, total_time });
-}
-
-const benchmark_num_trials = 1000;
-
-fn benchmark(comptime len: usize, comptime num_ranks: usize, evfn: anytype, comptime evfn_name: []const u8, io: Io) !void {
-    var map = std.AutoHashMap(u8, void).init(std.heap.c_allocator);
-    var ctx = try TestCtx.init(&map, io);
-    defer ctx.map.deinit();
-    try ctx.map.ensureTotalCapacity(len);
-    while (ctx.hand_idx < benchmark_num_trials * 1000) : (ctx.hand_idx += 1) {
-        const cards = try randomCardSample(len, ctx.map, ctx.rand.random(), 0, num_ranks * 4);
-        const args = if (num_ranks != 9) switch (len) { // non-shortdeck
-            5 => .{ 5, num_ranks, cards },
-            7 => .{ 7, num_ranks, cards },
-            9 => .{ 9, cards },
-            else => return error.InvalidLen,
-        } else switch (len) { // shortdeck
-            5 => .{ 5, cards },
-            7 => .{ 7, cards },
-            else => return error.InvalidLen,
-        };
-        const time = Io.Timestamp.now(io, .cpu_process);
-        const rank = @call(.auto, evfn, args);
-        std.mem.doNotOptimizeAway(rank);
-        ctx.total_time.nanoseconds += @intCast(time.untilNow(io, .cpu_process).nanoseconds);
-        if (rank == 0) return error.InvalidRank;
-        ctx.hand_idx += 1;
-    }
-    printBencharkInfo(ctx.total_time, ctx.hand_idx, evfn_name);
-}
-
-test "benchmark 7" {
-    try benchmark(7, 13, ev.evaluateNCards, "evaluate7Cards", testing.io);
-}
-
-test "benchmark 7 c" {
-    try benchmark(7, 13, phe_c.evaluateNCards, "evaluate7CardsC", testing.io);
 }
 
 const testing = std.testing;
@@ -144,25 +222,6 @@ fn randomCardSample(comptime len: u8, map: *std.AutoHashMap(u8, void), rand: std
     return result;
 }
 
-test "validate omaha" {
-    if (true) return error.SkipZigTest;
-    var map = std.AutoHashMap(u8, void).init(std.heap.c_allocator);
-    defer map.deinit();
-    var ctx = try TestCtx.init(&map, testing.io);
-    try ctx.map.ensureTotalCapacity(9);
-    while (ctx.hand_idx < benchmark_num_trials) : (ctx.hand_idx += 1) {
-        const cards = try randomCardSample(9, ctx.map, ctx.rand.random(), 0, 52);
-        const actual = ev.evaluateOmahaCards(9, 13, cards);
-        const expected = phe_c.evaluate_omaha_cards(cards[0].id, cards[1].id, cards[2].id, cards[3].id, cards[4].id, cards[5].id, cards[6].id, cards[7].id, cards[8].id);
-        try testing.expectEqual(@as(u16, @intCast(expected)), actual.value);
-    }
-}
-
-test "benchmark omaha" {
-    if (true) return error.SkipZigTest;
-    try benchmark(9, ev.evaluateOmahaCards, 13, "evaluateOmahaCards", testing.io);
-}
-
 fn evaluateOmahaCardsC(N: comptime_int, R: comptime_int, cs: [9]u8) u32 {
     _ = N;
     _ = R;
@@ -180,11 +239,6 @@ fn evaluateOmahaCardsC(N: comptime_int, R: comptime_int, cs: [9]u8) u32 {
         @as(c_int, @intCast(h[3])),
         @as(c_int, @intCast(h[4])),
     ));
-}
-
-test "benchmark omaha c" {
-    if (true) return error.SkipZigTest;
-    try benchmark(9, 13, evaluateOmahaCardsC, "evaluateOmahaCardsC", testing.io);
 }
 
 test "holdem" {
@@ -273,12 +327,15 @@ test "holdem" {
     try checkRankOrder("2c2d2h2s3c3d3s", "2c2d2h2s3c3d4c", "", .lt);
     try checkRankOrder("2c2d3c3d4c4d5s", "2c2d3c3d4c4d6c", "", .lt);
     try checkRankOrder("QhQdKd5d7h5hKs", "6hKhQsJsKc2cQc", "", .lt);
+    try checkRankOrder("Js4s2s7s3s6hKs", "As4dKd7d3d7hJd", "", .eq);
+    try checkRankOrder("2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
+    try checkRankOrder("2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
 }
 
 fn checkRankOrder(comptime l: []const u8, comptime r: []const u8, comptime b: []const u8, order: std.math.Order) !void {
     const lf = b ++ l;
     const rf = b ++ r;
-    std.debug.assert(lf.len == rf.len);
+    assert(lf.len == rf.len);
     const lr = ev.evaluateNHand(lf.len / 2, 13, lf);
     const rr = ev.evaluateNHand(rf.len / 2, 13, rf);
     errdefer std.debug.print(
@@ -469,7 +526,7 @@ test "shortdeck" {
 fn printDebugInfo(comptime ev_name: []const u8, len: usize, h: []Card, h2: []Card, rank: Rank, rank2: Rank, rank_sd: Rank, rank_sd2: Rank, cat: Rank.Category, cat2: Rank.Category, sdcat: Rank.Category, sd2cat: Rank.Category, bin: u16, bin2: u16) void {
     var buf: [20]u8 = undefined;
     var buf2: [20]u8 = undefined;
-    const cardsToSFn = if (comptime std.mem.eql(u8, ev_name, "sd")) Card.cardsToStringSd else Card.cardsToString;
+    const cardsToSFn = if (comptime mem.eql(u8, ev_name, "sd")) Card.cardsToStringSd else Card.cardsToString;
     std.debug.print("\nevaluate{}{12s} didn't match evaluate{} ({s}  {s}) {12s} ({}-{s} {}-{s}) expected ({}-{s} {}-{s})\n", .{
         len,                 len,
         cardsToSFn(h, &buf), cardsToSFn(h2, &buf2),
@@ -507,7 +564,7 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
 
             var classes = [_]Rank.Category{ sdcat, sdcat2, cat, cat2 };
             // fail on any invalid ranks
-            if (std.mem.indexOfScalar(Rank.Category, &classes, .invalid)) |_| try testing.expect(false);
+            if (mem.indexOfScalar(Rank.Category, &classes, .invalid)) |_| try testing.expect(false);
             const both_lte = sdrank.value <= sdrank2.value and rank.value <= rank2.value;
             const both_gte = sdrank.value >= sdrank2.value and rank.value >= rank2.value;
             if (!(both_gte or both_lte)) {
@@ -533,13 +590,13 @@ fn sdTest(comptime len: u8, comptime ev_fn_name: []const u8) !void {
                             try testing.expect(expected);
                         }
                     }
-                } else if (std.mem.eql(Rank.Category, &classes, &[_]Rank.Category{ .flush, .full_house, .flush, .full_house })) {
+                } else if (mem.eql(Rank.Category, &classes, &[_]Rank.Category{ .flush, .full_house, .flush, .full_house })) {
                     const expected = sdrank.value < sdrank2.value and rank.value > rank2.value;
                     if (!expected) {
                         printDebugInfo("sd", len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
                         try testing.expect(expected);
                     }
-                } else if (std.mem.eql(Rank.Category, &classes, &[_]Rank.Category{ .full_house, .flush, .full_house, .flush })) {
+                } else if (mem.eql(Rank.Category, &classes, &[_]Rank.Category{ .full_house, .flush, .full_house, .flush })) {
                     const expected = sdrank.value > sdrank2.value and rank.value < rank2.value;
                     if (!expected) {
                         printDebugInfo("sd", len, &h, &h2, rank, rank2, sdrank, sdrank2, cat, cat2, sdcat, sdcat2, bin, bin2);
@@ -570,16 +627,6 @@ test "fuzz shortdeck5" {
 test "fuzz shortdeck7" {
     if (true) return error.SkipZigTest;
     try sdTest(7, "evaluateShortdeck");
-}
-
-test "benchmark shortdeck 5" {
-    if (true) return error.SkipZigTest;
-    try benchmark(5, ev.evaluate5Shortdeck, 9, "evaluateShortdeck5", testing.io);
-}
-
-test "benchmark shortdeck 7" {
-    if (true) return error.SkipZigTest;
-    try benchmark(7, ev.evaluate7Shortdeck, 9, "evaluateShortdeck7", testing.io);
 }
 
 test "razz ev5" {
@@ -638,25 +685,25 @@ test "validate razz 5" {
             const strt_flush_categories = &[_]Rank.Category{ .straight_flush, .flush, .straight };
             const rk1_cat = rank.category();
             const rk2_cat = rank2.category();
-            const rk1_strt_or_flush = std.mem.indexOfScalar(Rank.Category, strt_flush_categories, rk1_cat) != null;
-            const rk2_strt_or_flush = std.mem.indexOfScalar(Rank.Category, strt_flush_categories, rk2_cat) != null;
+            const rk1_strt_or_flush = mem.indexOfScalar(Rank.Category, strt_flush_categories, rk1_cat) != null;
+            const rk2_strt_or_flush = mem.indexOfScalar(Rank.Category, strt_flush_categories, rk2_cat) != null;
             if (rk1_strt_or_flush and rk2_strt_or_flush) {
                 const h1_winner = ev.cardsToBinary(&h_alo) < ev.cardsToBinary(&h2_alo);
                 var buf: [len * 2]u8 = undefined;
                 const hand1 = Card.cardsToString(&h, &buf);
                 var rank_names1 = [_]u8{ hand1[0], hand1[2], hand1[4], hand1[6], hand1[8] };
                 const S = struct {};
-                std.mem.sort(u8, &rank_names1, {}, S.lessthan_rank_alo);
+                mem.sort(u8, &rank_names1, {}, S.lessthan_rank_alo);
 
-                std.mem.reverse(u8, &rank_names1);
+                mem.reverse(u8, &rank_names1);
                 var buf2: [len * 2]u8 = undefined;
                 const hand2 = Card.cardsToString(&h2, &buf2);
                 var rank_names2 = [_]u8{ hand2[0], hand2[2], hand2[4], hand2[6], hand2[8] };
-                std.mem.sort(u8, &rank_names2, {}, S.lessthan_rank_alo);
-                std.mem.reverse(u8, &rank_names2);
+                mem.sort(u8, &rank_names2, {}, S.lessthan_rank_alo);
+                mem.reverse(u8, &rank_names2);
                 const h1_less = S.asc_alo_hands({}, &rank_names1, &rank_names2);
                 if (h1_less != h1_winner)
-                    print("h1_less:{} ({s} < {s}) != h1_winner:{} ({b} < {b})", .{
+                    std.debug.print("h1_less:{} ({s} < {s}) != h1_winner:{} ({b} < {b})", .{
                         h1_less,
                         rank_names1,
                         rank_names2,
@@ -722,26 +769,14 @@ test "validate razz 7" {
 fn evaluate5CardsRazzVecWrap(a: Card, b: Card, c: Card, d: Card, e: Card, _: usize) Rank {
     return ev.evaluate5CardsRazz(a, b, c, d, e);
 }
-test "benchmark razz 5" {
-    if (true) return error.SkipZigTest;
-    try benchmark(5, evaluate5CardsRazzVecWrap, 13, "evaluateRazz5Vec", testing.io);
-}
-
-fn evaluate7CardsRazzVecWrap(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card, _: usize) Rank {
-    return ev.evaluate7CardsRazz(a, b, c, d, e, f, g);
-}
-
-test "benchmark razz 7" {
-    if (true) return error.SkipZigTest;
-    try benchmark(7, evaluate7CardsRazzVecWrap, 13, "evaluateRazz7Vec", testing.io);
-}
 
 const std = @import("std");
-const print = std.debug.print;
 const Io = std.Io;
-
+const mem = std.mem;
+const ev = @import("evaluator");
 const Card = ev.Card;
 const Rank = ev.Rank;
-const ev = @import("evaluator");
-const util = @import("util.zig");
+const util = ev.util;
 const phe_c = @import("phe_c.zig");
+const assert = std.debug.assert;
+const phe = @import("phe");

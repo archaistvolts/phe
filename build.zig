@@ -21,6 +21,7 @@ pub fn build(b: *std.Build) !void {
     });
 
     const phe_dep = b.dependency("PokerHandEvaluator", .{ .target = target, .optimize = optimize });
+    const phe_zig_dep = b.dependency("phe_zig", .{ .target = target, .optimize = optimize });
     const phe_lib = b.addLibrary(.{
         .name = "phe",
         .root_module = b.createModule(.{ .target = target, .optimize = optimize }),
@@ -44,6 +45,7 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "evaluator", .module = root_mod },
+                .{ .name = "phe", .module = phe_zig_dep.module("phe") },
                 // .{ .name = "phe", .module = phe_mod },
             },
         }),

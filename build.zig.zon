@@ -6,6 +6,10 @@
             .url = "git+https://github.com/HenryRLee/PokerHandEvaluator?ref=v0.5.2#0d16808709bd6e3202712d9593de89cd62e15a2a",
             .hash = "N-V-__8AAHi4TQ4nfTVCIg1xDu719gzZGKiql3ltPcsBxiEy",
         },
+        .phe_zig = .{
+            .url = "git+https://github.com/archaistvolts/phe#0f80ffd5dc27eaf93453a4d298ceacdbfa1e3348",
+            .hash = "phe-0.16.0-vJkwFMGIDQCG9e4ysJ5MV1s-cyC6W1eLKM365v6V_OWz",
+        },
     },
     .paths = .{""},
     .fingerprint = 0x2f5e26271532e24d,
