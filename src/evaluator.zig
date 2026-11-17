@@ -27,7 +27,7 @@ pub const Rank = packed struct(u32) {
     }
 
     pub fn format(r: Rank, w: *Io.Writer) !void {
-        try w.print("{t}:{b:0>13}:{b:0>13} {b:0>32}", .{ r.category, r.hi, r.lo, @as(u32, @backingInt(r)) });
+        try w.print("{t}:{b:0>13}:{b:0>13}", .{ r.category, r.hi, r.lo });
     }
 };
 
@@ -76,173 +76,138 @@ pub fn evaluateNHand(N: comptime_int, R: comptime_int, hand: []const u8) u32 {
 }
 
 /// R is the number of ranks, usually 13.
-pub noinline fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
-    const u8xN = @Vector(N, u8);
-    const uN = @Int(.unsigned, N);
+pub fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
     const u8xR = @Vector(R, u8);
     const u1xR = @Vector(R, u1);
     const uR = @Int(.unsigned, R);
+    const NFLUSH_MASKS = N + 1 - 5; // how many suits to check. 3 when N=7 - flush suit must appear in first 3.
 
-    const uRxN = @Vector(N, uR);
-    const NFLUSH_MASKS = N + 1 - 5; // how many suits to check. 3 when N=7 because flush suit must appear in first 3.
-    const NSTRT_MASKS = R + 2 - 5;
-    const uRxSTRT = @Vector(NSTRT_MASKS, uR);
-
-    const cardsv: u8xN = cards;
-    const suits = cardsv & @as(u8xN, @splat(0x3));
-    var flushsuit: u8 = 255;
-    inline for (0..NFLUSH_MASKS) |i| {
-        const same: uN = @bitCast(suits == @as(u8xN, @splat(suits[i])));
-        misc.trace(@src(), "same {b}\n", .{same});
-        if (@popCount(same) > 4)
-            flushsuit = suits[i];
-    }
-
-    const ranks = cardsv >> @as(u8xN, @splat(2));
-    const ranks_masks = @as(uRxN, @splat(1)) << @truncate(ranks);
-    const ranks_mask = @reduce(.Or, ranks_masks); // unique ranks
-
-    var counts: [R]u8 = @splat(0);
+    var ranksuits: [R]u8 = @splat(0); // suit bitsets for each rank
+    var ranksmask: uR = 0;
+    var suitmasks: [4]uR = @splat(0);
     inline for (0..N) |i| {
-        counts[ranks[i]] += 1;
+        const rank = cards[i] >> 2;
+        const rankmask = @as(uR, 1) << @truncate(rank);
+        ranksmask |= rankmask;
+        const suit = cards[i] & 0b11;
+        suitmasks[suit] |= rankmask;
+        ranksuits[rank] |= @as(u8, 1) << @truncate(suit);
     }
+
     var flushmask: uR = 0;
-    if (flushsuit != 255) {
-        const flushsuits = suits == @as(u8xN, @splat(flushsuit));
-        const flushranks = @select(uR, flushsuits, ranks_masks, @as(uRxN, @splat(0)));
-        flushmask = @reduce(.Or, flushranks);
+    inline for (0..NFLUSH_MASKS) |i| {
+        const suit = cards[i] & 0b11;
+        const suitsmatch = suitmasks[suit];
+        if (@popCount(suitsmatch) > 4) {
+            flushmask = suitsmatch;
+            break;
+        }
     }
 
-    const countsv: u8xR = counts;
-    const singles_mask: uR = @bitCast(@as(u1xR, @bitCast(countsv == @as(u8xR, @splat(1)))));
-    const doubles_mask: uR = @bitCast(@as(u1xR, @bitCast(countsv == @as(u8xR, @splat(2)))));
-    const triples_mask: uR = @bitCast(@as(u1xR, @bitCast(countsv == @as(u8xR, @splat(3)))));
-    const quads_mask: uR = @bitCast(@as(u1xR, @bitCast(countsv == @as(u8xR, @splat(4)))));
-    const ALO_STRT_MASK = 0b1111 | (1 << (R - 1)); // A-low
-    const S = struct {
-        fn highestStraight(ranksmask: uR) ?u8 {
-            comptime var straight_masks_all: uRxSTRT = undefined;
-            comptime for (0..NSTRT_MASKS - 1) |i| {
-                straight_masks_all[i] = 0b11111 << (NSTRT_MASKS - i - 2);
-            };
-            straight_masks_all[NSTRT_MASKS - 1] = ALO_STRT_MASK;
-            // misc.trace(@src(), "{b}\n", .{straight_masks_all});
-            const straight_masks = straight_masks_all & @as(uRxSTRT, @splat(ranksmask));
-            return if (simd.firstTrue(@popCount(straight_masks) > @as(uRxSTRT, @splat(4)))) |i|
-                NSTRT_MASKS - 1 - i
-            else
-                null;
-        }
-
-        fn clearHighestBit(n: uR) uR {
-            const bit = @bitSizeOf(uR) - 1 - @clz(n);
-            return n & ~(@as(uR, 1) << bit);
-        }
-    };
-
-    const straightrank = S.highestStraight(ranks_mask);
     var ret: Rank = .uninit;
-    const nsingles = @popCount(singles_mask);
-    const ndoubles = @popCount(doubles_mask);
-    const ntriples = @popCount(triples_mask);
-    const strflushrank = S.highestStraight(flushmask);
     const bin_fmt = std.fmt.comptimePrint("{{b:0>{}}}", .{R});
-    defer assert(flushsuit == flushsuit);
-    defer misc.trace(@src(), // zig fmt: off
+    defer util.trace(@src(), // zig fmt: off
         \\cards         :{f}
-        \\ranks_mask    :
-        ++ bin_fmt ++ \\
-        \\counts        :{any}
-        \\singles_mask  :
-        ++ bin_fmt ++ \\
-        \\doubles_mask  :
-        ++ bin_fmt ++ \\
-        \\triples_mask  :
-        ++ bin_fmt ++ \\
-        \\quads_mask    :
-        ++ bin_fmt ++ \\
-        \\              :{},{},{},{}: singles,doubles,triples,quads
+        \\ranksuits     :{b:0>4}
         \\flushmask     :
         ++ bin_fmt ++ \\
-        \\straightrank  :{?}
-        \\strflushrank  :{?}
+        \\ranksmask     :
+        ++ bin_fmt ++ \\
         \\ret           :{f}
         \\
         \\
     , .{ // zig fmt: on
         Card.Cards.fromIds(&cards).fmtColor(),
-        ranks_mask,
-        counts,
-        singles_mask,
-        doubles_mask,
-        triples_mask,
-        quads_mask,
-        nsingles,
-        ndoubles,
-        ntriples,
-        @popCount(quads_mask),
+        @as(u8xR, ranksuits),
         flushmask,
-        straightrank,
-        strflushrank,
+        ranksmask,
         ret,
     });
 
-    const class =
-        (@as(u3, @intFromBool(flushmask != 0)) << 2) |
-        (@as(u3, @intFromBool(straightrank != null)) << 1) |
-        @intFromBool(strflushrank != null);
-
-    ret = switch (class) {
-        else => .uninit,
-        0b111 => .init(.straight_flush, strflushrank.?, 0),
-        0b100, 0b110 => .init(.flush, flushmask, 0),
-        0b010 => .init(.straight, straightrank.?, 0),
-        0b00 => switch (u8Triple(ndoubles, ntriples, @popCount(quads_mask))) {
-            u8Triple(0, 0, 1),
-            u8Triple(0, 1, 1),
-            u8Triple(1, 0, 1),
-            => .init(.four_kind, quads_mask, @as(uR, 1) << (R - 1 - @clz(ranks_mask & ~quads_mask))),
-            u8Triple(1, 1, 0),
-            => .init(.full_house, triples_mask, doubles_mask),
-            u8Triple(0, 2, 0),
-            => .init(.full_house, triples_mask & (triples_mask - 1), @as(uR, 1) << @ctz(triples_mask)),
-            u8Triple(2, 1, 0),
-            => .init(.full_house, triples_mask, doubles_mask & (doubles_mask - 1)),
-            u8Triple(0, 1, 0),
-            => .init(.three_kind, triples_mask, @as(uR, 1) << (R - 1 - @clz(singles_mask))),
-            u8Triple(2, 0, 0),
-            => .init(.two_pair, doubles_mask, @as(uR, 1) << (R - 1 - @clz(singles_mask))),
-            u8Triple(3, 0, 0),
-            => .init(
-                .two_pair,
-                doubles_mask & (doubles_mask - 1),
-                @as(uR, 1) << (R - 1 - @clz(singles_mask | S.clearHighestBit(S.clearHighestBit(doubles_mask)))),
-            ),
-            u8Triple(1, 0, 0),
+    ret = if (highestStraight(uR, flushmask)) |r|
+        .init(.straight_flush, r, 0)
+    else if (flushmask != 0) blk: {
+        if (N == 5)
+            break :blk .init(.flush, flushmask, 0);
+        const flushcount = @popCount(flushmask);
+        break :blk .init(.flush, (flushmask & (flushmask - @intFromBool(flushcount > 5))), 0);
+    } else if (highestStraight(uR, ranksmask)) |r|
+        .init(.straight, r, 0)
+    else rank: {
+        const rankcounts = @popCount(@as(u8xR, ranksuits));
+        const single: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(1)))));
+        const pair: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(2)))));
+        const trip: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(3)))));
+        const quad: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(4)))));
+        break :rank switch (u8x3_u32(.{ @popCount(pair), @popCount(trip), @popCount(quad) })) {
+            u8x3_u32(.{ 0, 0, 1 }),
+            => .init(.four_kind, quad, if (N == 5) single else @as(uR, 1) << (R - 1 - @clz(ranksmask & ~quad))),
+            u8x3_u32(.{ 0, 1, 1 }),
+            u8x3_u32(.{ 1, 0, 1 }),
+            => .init(.four_kind, quad, if (N == 5) unreachable else @as(uR, 1) << (R - 1 - @clz(ranksmask & ~quad))),
+            u8x3_u32(.{ 1, 1, 0 }),
+            => .init(.full_house, trip, pair),
+            u8x3_u32(.{ 0, 2, 0 }),
+            => .init(.full_house, if (N == 5) unreachable else trip & (trip - 1), @as(uR, 1) << @ctz(trip)),
+            u8x3_u32(.{ 2, 1, 0 }),
+            => .init(.full_house, trip, if (N == 5) unreachable else pair & (pair - 1)),
+            u8x3_u32(.{ 0, 1, 0 }),
+            => .init(.three_kind, trip, if (N == 5) single else @as(uR, 1) << (R - 1 - @clz(single))),
+            u8x3_u32(.{ 2, 0, 0 }),
+            => .init(.two_pair, pair, if (N == 5) single else @as(uR, 1) << (R - 1 - @clz(single))),
+            u8x3_u32(.{ 3, 0, 0 }),
             => blk: {
-                var mask = singles_mask;
+                if (N == 5) unreachable;
+                const himask = pair & (pair - 1);
+                break :blk .init(.two_pair, himask, @as(uR, 1) << (R - 1 - @clz(ranksmask & ~himask)));
+            },
+            packInts(3, u8, .{ 1, 0, 0 }),
+            => blk: {
+                if (N == 5)
+                    break :blk .init(.one_pair, pair, single);
+                var mask = single;
                 inline for (0..N - 5) |_|
                     mask &= mask - 1;
-                break :blk .init(.one_pair, doubles_mask, mask);
+                break :blk .init(.one_pair, pair, mask);
             },
             else => blk: {
-                var mask = singles_mask;
+                if (N == 5)
+                    break :blk .init(.one_pair, 0, single);
+                var mask = single;
                 inline for (0..N - 5) |_|
                     mask &= mask - 1;
                 break :blk .init(.high_card, 0, mask);
             },
-        },
+        };
     };
 
     return ret.int();
 }
 
-fn u8Pair(a: u8, b: u8) u16 {
-    return @bitCast([2]u8{ a, b });
+fn highestStraight(T: type, mask: T) ?u8 {
+    if (@popCount(mask) < 5)
+        return null;
+
+    const starts = mask &
+        (mask >> 1) & (mask >> 2) &
+        (mask >> 3) & (mask >> 4);
+
+    const width = @bitSizeOf(T);
+
+    const rank = @as(u8, width) + 1 - @clz(starts);
+    const WHEEL = 0b1111 | (1 << (width - 1));
+    const isnonwheel = starts != 0;
+    const ret = rank * @intFromBool(isnonwheel) + @intFromBool(!isnonwheel and (mask & WHEEL) == WHEEL);
+    // util.trace(@src(), "mask {b} starts {b} rank {} isnonwheel {} ret {}\n", .{ mask, starts, rank, isnonwheel, ret });
+    return ([2]?u8{ ret, null })[@intFromBool(ret == 0)];
 }
 
-fn u8Triple(a: u8, b: u8, c: u8) u32 {
-    return @bitCast([4]u8{ 0, a, b, c });
+fn packInts(N: comptime_int, T: type, ints: [N]T) @Int(.unsigned, @bitSizeOf(T) * N) {
+    return @bitCast(ints);
+}
+
+fn u8x3_u32(ints: anytype) u32 {
+    return packInts(3, u8, ints);
 }
 
 const std = @import("std");
@@ -252,5 +217,4 @@ const mem = std.mem;
 const math = std.math;
 const Io = std.Io;
 pub const Card = @import("card.zig");
-pub const rank = @import("rank.zig");
-pub const misc = @import("misc.zig");
+pub const util = @import("util.zig");

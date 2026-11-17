@@ -2,7 +2,7 @@ id: u8,
 
 pub fn suitName(c: u8, case: enum { upper, lower }) u8 {
     return "cdhs"[@as(u2, @truncate(c))] ^
-        @as(u8, @intFromBool(case == .upper)) * 32;
+        (@as(u8, @intFromBool(case == .upper)) * 32);
 }
 
 pub fn suitEscape(c: u8) []const u8 {
@@ -17,7 +17,7 @@ pub fn suitEscape(c: u8) []const u8 {
 pub fn rankName(c: u8, case: enum { upper, lower }) u8 {
     const x = c >> 2;
     return "23456789tjqka"[x] ^
-        @as(u8, @intFromBool(x > 7 and case == .upper)) * 32;
+        (@as(u8, @intFromBool(x > 7 and case == .upper)) * 32);
 }
 
 pub fn format(c: Card, w: *Io.Writer) !void {
