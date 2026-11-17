@@ -356,7 +356,7 @@ fn isRankClassOh(c: Rank.Category, comptime h: []const u8, comptime board: []con
 }
 
 fn makeFlush(comptime ranks: []const u8) [ranks.len * 2]u8 {
-    var res = [1]u8{'s'} ** ranks.len ** 2;
+    var res: [ranks.len * 2]u8 = @splat('s');
     for (ranks, 0..) |rk, i| res[i * 2] = rk;
     return res;
 }

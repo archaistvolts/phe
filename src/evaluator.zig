@@ -97,7 +97,7 @@ pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, comptime num_
 
     const suit = suits[suit_hash];
     if (suit != 0) {
-        var suit_binary = [1]u16{0} ** 4;
+        var suit_binary: [4]u16 = @splat(0);
         suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
         suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
         suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
@@ -106,7 +106,7 @@ pub fn evaluate5Cards(a: Card, b: Card, c: Card, d: Card, e: Card, comptime num_
         return Rank{ .value = flush[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u8{0} ** 13;
+    var quinary: [13]u8 = @splat(0);
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -132,7 +132,7 @@ pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
     const suit = suits[suit_hash];
 
     if (suit != 0) {
-        var suit_binary = [1]u16{0} ** 4;
+        var suit_binary: [4]u16 = @splat(0);
 
         suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
         suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
@@ -145,7 +145,7 @@ pub fn evaluate7Cards(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: C
         return Rank{ .value = flush[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u8{0} ** 13;
+    var quinary: [13]u8 = @splat(0);
 
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
@@ -207,8 +207,8 @@ pub fn hashBinary(binary: u16, comptime len: u8, k_: u8) u32 {
 pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: Card, h2: Card, h3: Card, h4: Card) Rank {
     var value_flush: u16 = 10000;
     var value_noflush: u16 = 10000;
-    var suit_count_board = [1]u8{0} ** 4;
-    var suit_count_hole = [1]u8{0} ** 4;
+    var suit_count_board: [4]u8 = @splat(0);
+    var suit_count_hole: [4]u8 = @splat(0);
 
     suit_count_board[c1.id & 0x3] += 1;
     suit_count_board[c2.id & 0x3] += 1;
@@ -224,7 +224,7 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
     var i: u8 = 0;
     while (i < 4) : (i += 1) {
         if (suit_count_board[i] >= 3 and suit_count_hole[i] >= 2) {
-            var suit_binary_board = [1]u16{0} ** 4;
+            var suit_binary_board: [4]u16 = @splat(0);
 
             suit_binary_board[c1.id & 0x3] |= binaries_by_id[c1.id];
             suit_binary_board[c2.id & 0x3] |= binaries_by_id[c2.id];
@@ -232,7 +232,7 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
             suit_binary_board[c4.id & 0x3] |= binaries_by_id[c4.id];
             suit_binary_board[c5.id & 0x3] |= binaries_by_id[c5.id];
 
-            var suit_binary_hole = [1]u16{0} ** 4;
+            var suit_binary_hole: [4]u16 = @splat(0);
             suit_binary_hole[h1.id & 0x3] |= binaries_by_id[h1.id];
             suit_binary_hole[h2.id & 0x3] |= binaries_by_id[h2.id];
             suit_binary_hole[h3.id & 0x3] |= binaries_by_id[h3.id];
@@ -256,8 +256,8 @@ pub fn evaluateOmahaCards(c1: Card, c2: Card, c3: Card, c4: Card, c5: Card, h1: 
         }
     }
 
-    var quinary_board = [1]u8{0} ** 13;
-    var quinary_hole = [1]u8{0} ** 13;
+    var quinary_board: [13]u8 = @splat(0);
+    var quinary_hole: [13]u8 = @splat(0);
 
     quinary_board[c1.id >> 2] += 1;
     quinary_board[c2.id >> 2] += 1;
@@ -292,7 +292,7 @@ pub fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
 
     const suit = suits[suit_hash];
     if (suit != 0) {
-        var suit_binary = [1]u16{0} ** 4;
+        var suit_binary: [4]u16 = @splat(0);
         suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
         suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
         suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
@@ -302,7 +302,7 @@ pub fn evaluate5Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
         return Rank{ .value = flush_sd5[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u8{0} ** 9;
+    var quinary: [9]u8 = @splat(0);
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -330,7 +330,7 @@ pub fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, 
 
     const suit = suits[suit_hash];
     if (suit != 0) {
-        var suit_binary = [1]u16{0} ** 4;
+        var suit_binary: [4]u16 = @splat(0);
         suit_binary[a.id & 0x3] |= binaries_by_id[a.id];
         suit_binary[b.id & 0x3] |= binaries_by_id[b.id];
         suit_binary[c.id & 0x3] |= binaries_by_id[c.id];
@@ -341,7 +341,7 @@ pub fn evaluate7Shortdeck(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, 
         return Rank{ .value = flush_sd7[suit_binary[suit - 1]] };
     }
 
-    var quinary = [1]u8{0} ** 9;
+    var quinary: [9]u8 = @splat(0);
     quinary[a.id >> 2] += 1;
     quinary[b.id >> 2] += 1;
     quinary[c.id >> 2] += 1;
@@ -370,7 +370,7 @@ pub fn cardsToBinary(cards: []const Card) u16 {
 }
 
 pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
-    var quinary = [1]u8{0} ** 13;
+    var quinary: [13]u8 = @splat(0);
     quinary[Card.rankToAlo(a.id >> 2)] += 1;
     quinary[Card.rankToAlo(b.id >> 2)] += 1;
     quinary[Card.rankToAlo(c.id >> 2)] += 1;
@@ -383,7 +383,7 @@ pub fn evaluate5CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
 }
 
 pub fn evaluate7CardsRazz(a: Card, b: Card, c: Card, d: Card, e: Card, f: Card, g: Card) Rank {
-    var quinary = [1]u8{0} ** 13;
+    var quinary: [13]u8 = @splat(0);
     quinary[Card.rankToAlo(a.id >> 2)] += 1;
     quinary[Card.rankToAlo(b.id >> 2)] += 1;
     quinary[Card.rankToAlo(c.id >> 2)] += 1;
@@ -404,7 +404,7 @@ pub fn evaluate5CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card) Rank {
     ranks >>= @splat(@as(u3, 2));
     ranks += @splat(@as(u8, 1));
     ranks %= @splat(@as(u8, 13));
-    var quinary = [1]u8{0} ** 13;
+    var quinary: [13]u8 = @splat(0);
     comptime var i: u8 = 0;
     inline while (i < 5) : (i += 1) quinary[ranks[i]] += 1;
     const hash = hashQuinary(&quinary, 13, 5);
@@ -429,7 +429,7 @@ pub fn evaluate7CardsRazzVec(a: Card, b: Card, c: Card, d: Card, e: Card, f: Car
     ranks >>= @splat(@as(u3, 2));
     ranks += @splat(@as(u8, 1));
     ranks %= @splat(@as(u8, 13));
-    var quinary = [1]u8{0} ** 13;
+    var quinary: [13]u8 = @splat(0);
     comptime var i: u8 = 0;
     inline while (i < 7) : (i += 1) quinary[ranks[i]] += 1;
     const hash = hashQuinary(&quinary, 13, 7);

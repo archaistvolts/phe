@@ -78,7 +78,7 @@ test "gensd5" {
                     ctx_.flushes_sd[bin_sd] = rank.value;
                 },
                 else => {
-                    var quinary = [1]u8{0} ** 9;
+                    var quinary: [9]u8 = @splat(0);
                     for (cards_sd) |c| quinary[c.id >> 2] += 1;
                     const hash = ev.hashQuinary(&quinary, 9, 5);
                     ctx_.nonflushes_sd[hash] = rank.value;
@@ -91,7 +91,7 @@ test "gensd5" {
                 ctx_.category_counts[catid] += 1;
                 ctx_.category_rank_boundaries[catid_adj][0] = @min(ctx_.category_rank_boundaries[catid_adj][0], rank.value);
                 ctx_.category_rank_boundaries[catid_adj][1] = @max(ctx_.category_rank_boundaries[catid_adj][1], rank.value);
-                var quinary = [1]u8{0} ** 9;
+                var quinary: [9]u8 = @splat(0);
                 for (cards_sd) |c| quinary[c.id >> 2] += 1;
                 const qs = try std.mem.dupe(allocator, u8, &quinary);
                 _ = try ctx_.category_counts_distinct[catid].put(qs, if (ctx_.category_counts_distinct[catid].getValue(qs)) |c| c + 1 else 1);
@@ -109,15 +109,15 @@ test "gensd5" {
 fn warnLogCounts(category_counts: CategoryCount, category_counts_distinct: CategoryCountDistinct, category_rank_boundaries: CategoryCountBoundary) void {
     print("total counts\n", .{});
     for (category_counts, 0..) |cc, i| {
-        print("cat {} count {}\n", .{ @as(Rank.Category, @enumFromInt(@as(std.meta.Tag(Rank.Category), @truncate(i)))), cc });
+        print("cat {} count {}\n", .{ @as(Rank.Category, @fromBackingInt(@intCast(@as(std.meta.Tag(Rank.Category), @truncate(i))))), cc });
     }
     print("distinct counts\n", .{});
     for (category_counts_distinct, 0..) |ccd, i| {
-        print("cat {} count {}\n", .{ @as(Rank.Category, @enumFromInt(@as(std.meta.Tag(Rank.Category), @truncate(i)))), ccd.count() });
+        print("cat {} count {}\n", .{ @as(Rank.Category, @fromBackingInt(@intCast(@as(std.meta.Tag(Rank.Category), @truncate(i))))), ccd.count() });
     }
     print("category rank ranges\n", .{});
     for (category_rank_boundaries, 0..) |chb, i| {
-        const cat = @as(Rank.Category, @enumFromInt(@as(std.meta.Tag(Rank.Category), @truncate(i))));
+        const cat = @as(Rank.Category, @fromBackingInt(@intCast(@as(std.meta.Tag(Rank.Category), @truncate(i)))));
         if (cat == .invalid) continue;
         print("cat {} range {}-{}:{}\n", .{ cat, chb[0], chb[1], chb[1] - chb[0] });
     }
@@ -157,7 +157,7 @@ test "gensd7" {
                     else => blk: {
                         const bin = ev.cardsToBinary(&cards);
                         const wheel_mask = 0b1000011110000;
-                        break :blk if (bin & wheel_mask == wheel_mask and @intFromEnum(rank.category()) > @intFromEnum(@as(Rank.Category, .straight)))
+                        break :blk if (bin & wheel_mask == wheel_mask and @backingInt(rank.category()) > @backingInt(@as(Rank.Category, .straight)))
                             1609
                         else
                             rank.value;
@@ -177,7 +177,7 @@ test "gensd7" {
                     ctx_.flushes_sd[bin_sd] = rank.value;
                 },
                 else => {
-                    var quinary = [1]u8{0} ** 9;
+                    var quinary: [9]u8 = @splat(0);
                     for (cards_sd) |c| quinary[c.id >> 2] += 1;
                     const hash = ev.hashQuinary(&quinary, 9, 7);
                     ctx_.nonflushes_sd[hash] = rank.value;
@@ -248,13 +248,13 @@ test "razzBuildFromExisting" {
     defer file.close();
     const stream = file.reader();
     var buf: [20]u8 = undefined;
-    var ranks = [1]u16{0} ** 6162;
+    var ranks: [6162]u16 = @splat(0);
     var max: u32 = 0;
     var min: u32 = std.math.maxInt(u32);
     while (try stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
         // print("line {}\n", .{line});
         var parts = std.mem.split(u8, line, ":");
-        var hand = [1]u8{'c'} ** 10;
+        var hand: [10]u8 = @splat('c');
         const ranks_str = parts.next().?;
         for (ranks_str, 0..) |card, i| hand[i * 2] = card;
         // print("hand {}\n", .{hand});
@@ -262,7 +262,7 @@ test "razzBuildFromExisting" {
         // const alo_cards = Card.cardsToAlo(5, &cards);
         const rank_str = parts.next().?;
         const rank = try std.fmt.parseUnsigned(u16, rank_str, 10);
-        var quinary = [1]u8{0} ** 13;
+        var quinary: [13]u8 = @splat(0);
         for (cards) |card| quinary[card.id >> 2] += 1;
         const hash = ev.hashQuinary(&quinary, 13, 5);
         if (debug)
@@ -374,7 +374,7 @@ test "razzBuild5" {
     }.func;
 
     try util.comb5Cb(0, 52, cb, &ctx);
-    var ranks = [1]RankInfo{.{}} ** 6175;
+    var ranks: [6175]RankInfo = @splat(.{});
     const hands_maps = [_]*HandsMap{ &ctx.non_paired_hands_map, &ctx.onepr_hands_map, &ctx.twopr_hands_map, &ctx.threekind_hands_map, &ctx.fullhouse_hands_map, &ctx.fourkind_hands_map };
     // print("non_paired_hands_map count {}", .{non_paired_hands_map.count()});
     var hand_rank: u16 = 0;
@@ -393,7 +393,7 @@ test "razzBuild5" {
             _ = i;
             // output("{}, // {}\n", .{ hand_rank, entry.key });
             hand_rank += 1;
-            var quinary = [1]u8{0} ** 13;
+            var quinary: [13]u8 = @splat(0);
             for (entry.key_ptr.*) |r|
                 quinary[Card.rankToAlo(Card.nameToRank(r))] += 1;
             const hash = ev.hashQuinary(&quinary, 13, 5);
@@ -423,7 +423,7 @@ test "razzBuild5" {
 test "razzBuild7" {
     if (!output_table) return;
     const Ranks = [49205]u16;
-    const ranks = [1]u16{0} ** @typeInfo(Ranks).Array.len;
+    const ranks: [@typeInfo(Ranks).Array.len]u16 = @splat(0);
 
     const ContextInner = struct {
         best: u16,
@@ -446,7 +446,7 @@ test "razzBuild7" {
         fn func(ids: [7]u8, ctx: anytype) !bool {
             var ctx_inner = ContextInner{ .best = std.math.maxInt(u16), .ids = ids };
             try util.comb5Cb(0, 7, cb_inner, &ctx_inner);
-            var quinary = [1]u8{0} ** 13;
+            var quinary: [13]u8 = @splat(0);
             for (ids) |id|
                 quinary[Card.rankToAlo(id >> 2)] += 1;
             const hash = ev.hashQuinary(&quinary, 13, 7);
