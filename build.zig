@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) !void {
     if (build_shared_lib) tables.force_pic = true;
     b.installArtifact(tables);
 
-    const root_mod = b.createModule(.{
+    const root_mod = b.addModule("phe", .{
         .root_source_file = b.path("src/evaluator.zig"),
         .target = target,
         .optimize = optimize,
