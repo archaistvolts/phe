@@ -6,12 +6,10 @@
 RELEASE=small
 STRIP=true
 
-set -xe
-
 runBench() {
     zig build --release=$RELEASE       -DbenchN=5 -DbenchR=13 -Dstrip=$STRIP
     cp zig-out/bin/bench zig-out/bin/bench-5-$RELEASE
-    zig build --release=$RELEASE -Dphe -DbenchN=5 -DbenchR=13 -Dstrip=$STRIP --verbose
+    zig build --release=$RELEASE -Dphe -DbenchN=5 -DbenchR=13 -Dstrip=$STRIP
     cp zig-out/bin/bench zig-out/bin/bench-c-5-$RELEASE
     ~/Documents/Code/zig/poop/zig-out/bin/poop -d 2000 zig-out/bin/bench-c-5-$RELEASE zig-out/bin/bench-5-$RELEASE
 

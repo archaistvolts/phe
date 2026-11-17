@@ -21,18 +21,21 @@ pub fn build(b: *std.Build) !void {
     });
 
     const phe_dep = b.dependency("PokerHandEvaluator", .{ .target = target, .optimize = optimize });
-    const phe_mod = b.createModule(.{ .target = target, .optimize = optimize });
-    phe_mod.link_libc = true;
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator5.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator7.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator_omaha.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hash.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/tables_omaha.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hashtable.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hashtable5.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hashtable7.c") });
-    phe_mod.addCSourceFile(.{ .file = phe_dep.path("cpp/src/dptables.c") });
-    phe_mod.addIncludePath(phe_dep.path("cpp/src"));
+    const phe_lib = b.addLibrary(.{
+        .name = "phe",
+        .root_module = b.createModule(.{ .target = target, .optimize = optimize }),
+    });
+    phe_lib.root_module.link_libc = true;
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator5.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator7.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/evaluator_omaha.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hash.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/tables_omaha.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hashtable.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hashtable5.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/hashtable7.c") });
+    phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/dptables.c") });
+    phe_lib.root_module.addIncludePath(phe_dep.path("cpp/src"));
 
     var tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -41,15 +44,17 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "evaluator", .module = root_mod },
-                .{ .name = "phe", .module = phe_mod },
+                // .{ .name = "phe", .module = phe_mod },
             },
         }),
     });
+    tests.root_module.linkLibrary(phe_lib);
     tests.filters = if (b.option([]const u8, "test-filter", "test filter")) |f| b.dupeStrings(&.{f}) else &.{};
     const teststep = b.step("test", "Run library tests");
     const testsrun = b.addRunArtifact(tests);
     testsrun.has_side_effects = true;
     teststep.dependOn(&testsrun.step);
+
     b.installArtifact(tests);
 
     const bench = b.addExecutable(.{
@@ -60,12 +65,13 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "evaluator", .module = root_mod },
-                .{ .name = "phe", .module = if (phe_option) phe_mod else undefined },
+                // .{ .name = "phe", .module = if (phe_option) phe_mod else undefined },
                 .{ .name = "build-options", .module = options_mod },
             },
             .strip = strip,
         }),
     });
+    bench.root_module.linkLibrary(phe_lib);
     const benchstep = b.step("bench", "Run a benchmark");
     const benchrun = b.addRunArtifact(bench);
     benchrun.has_side_effects = true;
