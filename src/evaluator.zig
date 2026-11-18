@@ -1,7 +1,10 @@
 //! # Resources
 //!
-//! https://jonathanhsiao.com/blog/evaluating-poker-hands-with-bit-math
 //! https://github.com/zekyll/OMPEval
+//! https://github.com/HenryRLee/PokerHandEvaluator
+//! https://github.com/tangentforks/TwoPlusTwoHandEvaluator
+//! https://github.com/kennethshackleton/SKPokerEval
+//! https://jonathanhsiao.com/blog/evaluating-poker-hands-with-bit-math
 //! https://github.com/eljefeo/dead-horse-eval/
 //! https://github.com/kennethshackleton/SKPokerEval
 //!
@@ -9,8 +12,8 @@
 pub const Rank = packed struct(u32) {
     lo: u13,
     hi: u13,
-    category: Category,
     _30: u2 = 0,
+    category: Category,
 
     pub const uninit: Rank = @fromBackingInt(0);
 
@@ -82,25 +85,25 @@ pub fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
     const uR = @Int(.unsigned, R);
     const NFLUSH_MASKS = N + 1 - 5; // how many suits to check. 3 when N=7 - flush suit must appear in first 3.
 
-    var ranksuits: [R]u8 = @splat(0); // suit bitsets for each rank
-    var ranksmask: uR = 0; // all ranks
-    var suitmasks: [4]uR = @splat(0);
+    var ranksuits: [R]u8 = @splat(0); // suit masks by rank
+    var ranks: uR = 0; // all ranks mask
+    var suits: [4]uR = @splat(0); // rank masks by suit
     inline for (0..N) |i| {
         const rank = cards[i] >> 2;
         const rankmask = @as(uR, 1) << @truncate(rank);
-        ranksmask |= rankmask;
+        ranks |= rankmask;
         const suit = cards[i] & 0b11;
-        suitmasks[suit] |= rankmask;
+        suits[suit] |= rankmask;
         ranksuits[rank] |= @as(u8, 1) << @truncate(suit);
     }
 
-    var flushmask: uR = 0; // benchmaks show simd slower than this loop
+    var flush: uR = 0; // benchmaks show simd slower than this loop
     inline for (0..NFLUSH_MASKS) |i| {
         comptime assert(N < 10); // assumes only 1 flush possible in N cards
         const suit = cards[i] & 0b11;
-        const suitsmatch = suitmasks[suit];
+        const suitsmatch = suits[suit];
         if (@popCount(suitsmatch) > 4) {
-            flushmask = suitsmatch;
+            flush = suitsmatch;
             break;
         }
     }
@@ -112,7 +115,7 @@ pub fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
         \\ranksuits     :{b:0>4}
         \\flushmask     :
         ++ bin_fmt ++ \\
-        \\ranksmask     :
+        \\ranks         :
         ++ bin_fmt ++ \\
         \\ret           :{f}
         \\
@@ -120,66 +123,67 @@ pub fn evaluateNCards(N: comptime_int, R: comptime_int, cards: [N]u8) u32 {
     , .{ // zig fmt: on
         Card.Cards.fromIds(&cards).fmtColor(),
         @as(u8xR, ranksuits),
-        flushmask,
-        ranksmask,
+        flush,
+        ranks,
         ret,
     });
 
-    ret = if (highestStraight(uR, flushmask)) |r|
+    ret = if (highestStraight(uR, flush)) |r|
         .init(.straight_flush, r, 0)
-    else if (flushmask != 0) blk: {
+    else if (flush != 0)
         if (N == 5)
-            break :blk .init(.flush, flushmask, 0);
-        const flushcount = @popCount(flushmask);
-        break :blk .init(.flush, (flushmask & (flushmask - @intFromBool(flushcount > 5))), 0);
-    } else if (highestStraight(uR, ranksmask)) |r|
+            .init(.flush, flush, 0)
+        else blk: {
+            const count = @popCount(flush);
+            flush &= flush - @intFromBool(count >= 6);
+            flush &= flush - @intFromBool(count >= 7);
+            flush &= flush - @intFromBool(count >= 8);
+            break :blk .init(.flush, flush, 0);
+        }
+    else if (highestStraight(uR, ranks)) |r|
         .init(.straight, r, 0)
     else rank: {
         // benchmarks show simd speedup here vs scalar inline loop
         const rankcounts = @popCount(@as(u8xR, ranksuits));
-        const single: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(1)))));
-        const pair: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(2)))));
-        const trip: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(3)))));
+        var single: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(1)))));
+        var pair: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(2)))));
+        var trip: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(3)))));
         const quad: uR = @bitCast(@as(u1xR, @bitCast(rankcounts == @as(u8xR, @splat(4)))));
+
+        inline for (0..N - 5) |_|
+            single &= single -| 1;
         break :rank switch (u8x3_u32(.{ @popCount(pair), @popCount(trip), @popCount(quad) })) {
-            u8x3_u32(.{ 0, 0, 1 }),
-            => .init(.four_kind, quad, if (N == 5) single else @as(uR, 1) << (R - 1 - @clz(ranksmask & ~quad))),
+            u8x3_u32(.{ 0, 0, 1 }) => .init(.four_kind, quad, single),
             u8x3_u32(.{ 0, 1, 1 }),
             u8x3_u32(.{ 1, 0, 1 }),
-            => .init(.four_kind, quad, if (N == 5) unreachable else @as(uR, 1) << (R - 1 - @clz(ranksmask & ~quad))),
-            u8x3_u32(.{ 1, 1, 0 }),
-            => .init(.full_house, trip, pair),
+            => if (N == 5)
+                unreachable
+            else
+                .init(.four_kind, quad, @as(uR, 1) << (R - 1 - @clz(ranks & ~quad))),
+            u8x3_u32(.{ 1, 1, 0 }) => .init(.full_house, trip, pair),
             u8x3_u32(.{ 0, 2, 0 }),
-            => .init(.full_house, if (N == 5) unreachable else trip & (trip - 1), @as(uR, 1) << @ctz(trip)),
+            => if (N == 5)
+                unreachable
+            else blk: {
+                trip &= trip - 1;
+                break :blk .init(.full_house, trip, ~trip);
+            },
             u8x3_u32(.{ 2, 1, 0 }),
-            => .init(.full_house, trip, if (N == 5) unreachable else pair & (pair - 1)),
-            u8x3_u32(.{ 0, 1, 0 }),
-            => .init(.three_kind, trip, if (N == 5) single else @as(uR, 1) << (R - 1 - @clz(single))),
-            u8x3_u32(.{ 2, 0, 0 }),
-            => .init(.two_pair, pair, if (N == 5) single else @as(uR, 1) << (R - 1 - @clz(single))),
+            => if (N == 5)
+                unreachable
+            else
+                .init(.full_house, trip, pair & (pair - 1)),
+            u8x3_u32(.{ 0, 1, 0 }) => .init(.three_kind, trip, single),
+            u8x3_u32(.{ 2, 0, 0 }) => .init(.two_pair, pair, single),
             u8x3_u32(.{ 3, 0, 0 }),
-            => blk: {
-                if (N == 5) unreachable;
-                const himask = pair & (pair - 1);
-                break :blk .init(.two_pair, himask, @as(uR, 1) << (R - 1 - @clz(ranksmask & ~himask)));
+            => if (N == 5)
+                unreachable
+            else blk: {
+                pair &= (pair - 1);
+                break :blk .init(.two_pair, pair, @as(uR, 1) << (R - 1 - @clz(ranks & ~pair)));
             },
-            packInts(3, u8, .{ 1, 0, 0 }),
-            => blk: {
-                if (N == 5)
-                    break :blk .init(.one_pair, pair, single);
-                var mask = single;
-                inline for (0..N - 5) |_|
-                    mask &= mask - 1;
-                break :blk .init(.one_pair, pair, mask);
-            },
-            else => blk: {
-                if (N == 5)
-                    break :blk .init(.one_pair, 0, single);
-                var mask = single;
-                inline for (0..N - 5) |_|
-                    mask &= mask - 1;
-                break :blk .init(.high_card, 0, mask);
-            },
+            packInts(3, u8, .{ 1, 0, 0 }) => .init(.one_pair, pair, single),
+            else => .init(.high_card, 0, single),
         };
     };
 
