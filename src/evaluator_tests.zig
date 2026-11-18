@@ -4,15 +4,50 @@ test "fuzz" {
             try pheOracle(testing.allocator, smith);
         }
     };
-    // const corpus = try loadCorpus(testing.io, "testdata/crashfiles");
-    // defer {
-    //     for (corpus) |x| testgpa.free(x);
-    //     testgpa.free(corpus);
-    // }
-    try testing.fuzz(Context{}, Context.testOne, .{ .corpus = &.{"asdf"} });
+    try testing.fuzz(Context{}, Context.testOne, .{}); // TODO create corpus.zon file test "holdem" and use here
+}
 
-    // var prng = std.Random.DefaultPrng.init(0);
-    // try pheValidateAll(5, 13, prng.random());
+fn pheOracle(_: mem.Allocator, smith: *testing.Smith) !void {
+    const N = smith.valueWeighted(u8, &.{
+        .{ .max = 5, .min = 5, .weight = 50 },
+        .{ .max = 7, .min = 7, .weight = 50 },
+    });
+    const R = smith.valueWeighted(u8, &.{
+        // .{ .max = 9, .min = 9, .weight = 50 }, // TODO short deck
+        .{ .max = 13, .min = 13, .weight = 50 },
+    });
+
+    switch (N) {
+        5 => switch (R) {
+            9 => unreachable,
+            13 => {
+                var buf: [10]u8 = undefined;
+                CombinationIterator(52, 10).randomHand(smith, &buf);
+                const a1 = ev.evaluateNCards(5, 13, buf[0..5].*);
+                const a2 = ev.evaluateNCards(5, 13, buf[5..10].*);
+                const e1 = phe.evaluateCards(5, 13, buf[0..5].*);
+                const e2 = phe.evaluateCards(5, 13, buf[5..10].*);
+                errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(buf[0..5]), Card.Cards.fromIds(buf[5..10]), a1, a2, e1, e2 });
+                try testing.expectEqual(a1 < a2, e1.value > e2.value);
+            },
+            else => unreachable,
+        },
+        7 => switch (R) {
+            9 => unreachable,
+            13 => {
+                var buf: [14]u8 = undefined;
+                CombinationIterator(52, 14).randomHand(smith, &buf);
+                const a1 = ev.evaluateNCards(7, 13, buf[0..7].*);
+                const a2 = ev.evaluateNCards(7, 13, buf[7..14].*);
+                const e1 = phe.evaluateCards(7, 13, buf[0..7].*);
+                const e2 = phe.evaluateCards(7, 13, buf[7..14].*);
+                errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(buf[0..7]), Card.Cards.fromIds(buf[7..14]), a1, a2, e1, e2 });
+                try testing.expectEqual(a1 < a2, e1.value > e2.value);
+            },
+            else => unreachable,
+        },
+        else => unreachable,
+    }
 }
 
 fn pheFuzzFile(io: Io, path: []const u8) !void {
@@ -24,105 +59,6 @@ fn pheFuzzFile(io: Io, path: []const u8) !void {
 
 test "crash - current" {
     try pheFuzzFile(testing.io, ".zig-cache/f/crash");
-}
-
-fn pheOracle(_: mem.Allocator, smith: *testing.Smith) !void {
-    const N = smith.valueWeighted(u8, &.{
-        .{ .max = 5, .min = 5, .weight = 50 },
-        // .{ .max = 7, .min = 7, .weight = 50 },
-    });
-    const R = smith.valueWeighted(u8, &.{
-        // .{ .max = 9, .min = 9, .weight = 50 }, // TODO short deck
-        .{ .max = 13, .min = 13, .weight = 50 },
-    });
-
-    switch (N) {
-        5 => {
-            switch (R) {
-                9 => unreachable,
-                13 => {
-                    var buf: [10]u8 = undefined;
-                    CombinationIterator(52, 10).randomHand(smith, &buf);
-                    const a1 = ev.evaluateNCards(5, 13, buf[0..5].*);
-                    const a2 = ev.evaluateNCards(5, 13, buf[5..10].*);
-                    // const args: std.meta.ArgsTuple(@TypeOf(phe.evaluate5Cards)) = .{ undefined, undefined, undefined, undefined, undefined, 13 };
-                    // comptime args[5] = 13;
-                    // const bytes = mem.asBytes(&args);
-                    // bytes[0..5].* = @bitCast(buf[0..5].*);
-                    // std.debug.print("args {}\n", .{args});
-                    // const e1 = @call(.always_inline, phe.evaluate5Cards, args);
-                    const e1 = phe.evaluateCards(5, 13, buf[0..5].*);
-                    const e2 = phe.evaluateNCards(5, 13, buf[5..10].*);
-                    errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(buf[0..5]), Card.Cards.fromIds(buf[5..10]), a1, a2, e1, e2 });
-                    try testing.expectEqual(a1 < a2, e1.value > e2.value);
-                },
-                else => unreachable,
-            }
-        },
-        7 => unreachable,
-        else => unreachable,
-    }
-}
-
-pub fn CombinationIterator(N: comptime_int, K: comptime_int) type {
-    return struct {
-        current: I,
-
-        const I = @Int(.unsigned, N);
-        const start = (1 << K) - 1; //   7c5: 0b0011111
-        const limit: I = start << (N - K); // 0b1111100
-        const sentinel = std.math.maxInt(I);
-
-        const Self = @This();
-        pub const init: Self = .{ .current = start };
-
-        pub fn next(self: *Self) ?I {
-            comptime assert(sentinel > limit);
-            if (self.current == sentinel)
-                return null;
-
-            const res = self.current;
-
-            if (res == limit) {
-                self.current = sentinel;
-                return res;
-            }
-
-            // Gosper's Hack
-            const c = res & -%res;
-            const r = res +% c;
-            self.current = (((r ^ res) >> 2) / c) | r;
-
-            return res;
-        }
-
-        fn randomHand(smith: *std.testing.Smith, buf: *[K]u8) void {
-            var used: u64 = 0;
-            var out: usize = 0;
-
-            // Floyd's algorithm: sample N unique IDs from 0..51.
-            for (N - K..N) |j| {
-                const t = smith.valueRangeLessThan(u8, 0, @intCast(j + 1));
-
-                // If t was already selected, take j instead.
-                const chosen: u8 = @intCast(if ((used & (@as(u64, 1) << @intCast(t))) != 0) j else t);
-
-                used |= @as(u64, 1) << @intCast(chosen);
-                buf[out] = chosen;
-                out += 1;
-            }
-
-            // randomize order to exercise order-dependent bugs.
-            var i: u8 = K;
-            while (i > 1) {
-                i -= 1;
-                const j = smith.valueRangeLessThan(u8, 0, i + 1);
-                const tmp = buf[i];
-                buf[i] = buf[j];
-                buf[j] = tmp;
-            }
-        }
-    };
 }
 
 const TestCtx = struct {
@@ -330,6 +266,8 @@ test "holdem" {
     try checkRankOrder("Js4s2s7s3s6hKs", "As4dKd7d3d7hJd", "", .eq);
     try checkRankOrder("2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
     try checkRankOrder("2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
+    try checkRankOrder("5dAcAd9dKd7d8d", "9sAsKs2s7s4s8s", "", .eq);
+    try checkRankOrder("Kd8d7d5d6d", "As8s7s4s5s", "", .lt);
 }
 
 fn checkRankOrder(comptime l: []const u8, comptime r: []const u8, comptime b: []const u8, order: std.math.Order) !void {
@@ -780,3 +718,4 @@ const util = ev.util;
 const phe_c = @import("phe_c.zig");
 const assert = std.debug.assert;
 const phe = @import("phe");
+const CombinationIterator = @import("combinations.zig").CombinationIterator;

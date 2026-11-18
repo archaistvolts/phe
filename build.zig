@@ -6,13 +6,15 @@ pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
     const options_mod = options.createModule();
     options.addOption(bool, "trace", b.option(bool, "trace", "show debug trace output. default false.") orelse false);
-    const phe_option = b.option(bool, "phe", "run phe in bench. only applies to `zig build bench`") orelse false;
-    options.addOption(bool, "phe", phe_option);
+    const BenchTarget = enum { phe_c, phe_z, ev_z };
+    const bench_target = b.option(BenchTarget, "bench-target", "which target to bench.") orelse .ev_z;
+    options.addOption(BenchTarget, "bench_target", bench_target);
     options.addOption(u8, "benchN", b.option(u8, "benchN", "number of cards per hand. default 7.") orelse 7);
     options.addOption(u8, "benchR", b.option(u8, "benchR", "number of ranks per suit. default 13.") orelse 13);
+    options.addOption(bool, "verbose", b.option(bool, "verbose", "print bench timings to stderr. default false.") orelse false);
     const strip = b.option(bool, "strip", "strip debug symbols");
 
-    const root_mod = b.addModule("evaluator", .{
+    const root_mod = b.addModule("poker_eval", .{
         .root_source_file = b.path("src/evaluator.zig"),
         .target = target,
         .optimize = optimize,
@@ -21,7 +23,6 @@ pub fn build(b: *std.Build) !void {
     });
 
     const phe_dep = b.dependency("PokerHandEvaluator", .{ .target = target, .optimize = optimize });
-    const phe_zig_dep = b.dependency("phe_zig", .{ .target = target, .optimize = optimize });
     const phe_lib = b.addLibrary(.{
         .name = "phe",
         .root_module = b.createModule(.{ .target = target, .optimize = optimize }),
@@ -38,6 +39,8 @@ pub fn build(b: *std.Build) !void {
     phe_lib.root_module.addCSourceFile(.{ .file = phe_dep.path("cpp/src/dptables.c") });
     phe_lib.root_module.addIncludePath(phe_dep.path("cpp/src"));
 
+    const phe_zig_dep = b.dependency("phe_zig", .{ .target = target, .optimize = optimize });
+
     var tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/evaluator_tests.zig"),
@@ -46,7 +49,6 @@ pub fn build(b: *std.Build) !void {
             .imports = &.{
                 .{ .name = "evaluator", .module = root_mod },
                 .{ .name = "phe", .module = phe_zig_dep.module("phe") },
-                // .{ .name = "phe", .module = phe_mod },
             },
         }),
     });
@@ -67,7 +69,7 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "evaluator", .module = root_mod },
-                // .{ .name = "phe", .module = if (phe_option) phe_mod else undefined },
+                .{ .name = "phe", .module = phe_zig_dep.module("phe") },
                 .{ .name = "build-options", .module = options_mod },
             },
             .strip = strip,
