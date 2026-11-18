@@ -1,31 +1,36 @@
-fn bench(N: comptime_int, R: comptime_int, deck: *[52]u8, random: std.Random, evfn: anytype) void {
-    var r = std.Io.Reader.fixed(deck);
-    for (0..1_000_000) |_| {
-        const hand = r.take(N) catch blk: {
-            random.shuffle(u8, deck);
-            r = .fixed(deck);
-            break :blk r.take(N) catch unreachable;
-        };
-        // std.debug.print("{f}\n", .{ev.Card.Cards.fromIds(hand)});
-        mem.doNotOptimizeAway(evfn(N, R, hand[0..N].*));
+const num_hands = 1_000_000;
+
+fn bench(N: comptime_int, R: comptime_int, random: std.Random, evfn: anytype) void {
+    var cards: [N]u8 = undefined;
+    for (0..num_hands) |_| {
+        @import("combinations.zig").CombinationIterator(52, N).randomHand(random, &cards);
+        // std.debug.print("{f}\n", .{ev.Card.Cards.fromIds(&cards).fmtColor()});
+        mem.doNotOptimizeAway(evfn(N, R, cards));
     }
 }
 
 pub fn main(init: std.process.Init) !void {
-    _ = init; // autofix
     // var args = try init.minimal.args.iterateAllocator(init.gpa);
     // _ = args.next();
     // const raw_cards = try init.gpa.alloc(u8, 1024 * 1024 * 10);
 
-    var deck: [52]u8 = std.simd.iota(u8, 52);
     var prng = std.Random.DefaultPrng.init(0);
     const random = prng.random();
+    const tstart: std.Io.Timestamp = if (options.verbose) .now(init.io, .cpu_process) else undefined;
 
-    random.shuffle(u8, &deck);
-    if (options.phe) {
-        bench(options.benchN, options.benchR, &deck, random, phe_c.evaluateNCards);
-    } else {
-        bench(options.benchN, options.benchR, &deck, random, ev.evaluateNCards);
+    switch (options.bench_target) {
+        .phe_c => bench(options.benchN, options.benchR, random, phe_c.evaluateNCards),
+        .phe_z => bench(options.benchN, options.benchR, random, phe_z.evaluateCards),
+        .ev_z => bench(options.benchN, options.benchR, random, ev.evaluateNCards),
+    }
+
+    if (options.verbose) {
+        const telapsed = tstart.untilNow(init.io, .cpu_process);
+        // M/s : H/us
+        std.debug.print(
+            "{} hands in {f}: {:.1}M/s\n",
+            .{ num_hands, telapsed, num_hands / @as(f32, @floatFromInt(telapsed.toMicroseconds())) },
+        );
     }
 }
 
@@ -33,4 +38,5 @@ const std = @import("std");
 const mem = std.mem;
 const ev = @import("evaluator.zig");
 const phe_c = @import("phe_c.zig");
+const phe_z = @import("phe");
 const options = @import("build-options");
