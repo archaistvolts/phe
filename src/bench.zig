@@ -1,6 +1,6 @@
 const num_hands = 1_000_000;
 
-fn bench(N: comptime_int, R: comptime_int, random: std.Random, evfn: anytype) void {
+fn bench(N: comptime_int, comptime R: anytype, random: std.Random, evfn: anytype) void {
     var cards: [N]u8 = undefined;
     for (0..num_hands) |_| {
         @import("combinations.zig").CombinationIterator(52, N).randomHand(random, &cards);
@@ -21,15 +21,14 @@ pub fn main(init: std.process.Init) !void {
     switch (options.bench_target) {
         .phe_c => bench(options.benchN, options.benchR, random, phe_c.evaluateNCards),
         .phe_z => bench(options.benchN, options.benchR, random, phe_z.evaluateCards),
-        .ev_z => bench(options.benchN, options.benchR, random, ev.evaluateNCards),
+        .ev_z => bench(options.benchN, @as(ev.Deck, @fromBackingInt(options.benchR)), random, ev.evaluateNCards),
     }
 
     if (options.verbose) {
         const telapsed = tstart.untilNow(init.io, .cpu_process);
-        // M/s : H/us
         std.debug.print(
             "{} hands in {f}: {:.1}M/s\n",
-            .{ num_hands, telapsed, num_hands / @as(f32, @floatFromInt(telapsed.toMicroseconds())) },
+            .{ num_hands, telapsed, @as(f64, num_hands) / @as(f64, @floatFromInt(telapsed.toMicroseconds())) },
         );
     }
 }

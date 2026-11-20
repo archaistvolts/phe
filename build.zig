@@ -12,6 +12,7 @@ pub fn build(b: *std.Build) !void {
     options.addOption(u8, "benchN", b.option(u8, "benchN", "number of cards per hand. default 7.") orelse 7);
     options.addOption(u8, "benchR", b.option(u8, "benchR", "number of ranks per suit. default 13.") orelse 13);
     options.addOption(bool, "verbose", b.option(bool, "verbose", "print bench timings to stderr. default false.") orelse false);
+    options.addOption(bool, "run_slow_tests", b.option(bool, "run-slow-tests", "run slow tests. default false.") orelse false);
     const strip = b.option(bool, "strip", "strip debug symbols");
 
     const root_mod = b.addModule("poker_eval", .{
@@ -49,10 +50,10 @@ pub fn build(b: *std.Build) !void {
             .imports = &.{
                 .{ .name = "evaluator", .module = root_mod },
                 .{ .name = "phe", .module = phe_zig_dep.module("phe") },
+                .{ .name = "build-options", .module = options_mod },
             },
         }),
     });
-    tests.root_module.linkLibrary(phe_lib);
     tests.filters = if (b.option([]const u8, "test-filter", "test filter")) |f| b.dupeStrings(&.{f}) else &.{};
     const teststep = b.step("test", "Run library tests");
     const testsrun = b.addRunArtifact(tests);
@@ -69,7 +70,6 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "evaluator", .module = root_mod },
-                .{ .name = "phe", .module = phe_zig_dep.module("phe") },
                 .{ .name = "build-options", .module = options_mod },
             },
             .strip = strip,

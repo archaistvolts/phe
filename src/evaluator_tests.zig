@@ -8,43 +8,46 @@ test "fuzz" {
 }
 
 fn pheOracle(_: mem.Allocator, smith: *testing.Smith) !void {
-    const N = smith.valueWeighted(u8, &.{
-        .{ .max = 5, .min = 5, .weight = 50 },
-        .{ .max = 7, .min = 7, .weight = 50 },
+    const ncards = smith.valueWeighted(u8, &.{
+        .{ .min = 5, .max = 5, .weight = 50 },
+        .{ .min = 7, .max = 7, .weight = 50 },
     });
-    const R = smith.valueWeighted(u8, &.{
-        // .{ .max = 9, .min = 9, .weight = 50 }, // TODO short deck
-        .{ .max = 13, .min = 13, .weight = 50 },
-    });
+    const deck = smith.value(ev.Deck);
 
-    switch (N) {
-        5 => switch (R) {
-            9 => unreachable,
-            13 => {
-                var buf: [10]u8 = undefined;
-                CombinationIterator(52, 10).randomHand(smith, &buf);
-                const a1 = ev.evaluateNCards(5, 13, buf[0..5].*);
-                const a2 = ev.evaluateNCards(5, 13, buf[5..10].*);
-                const e1 = phe.evaluateCards(5, 13, buf[0..5].*);
-                const e2 = phe.evaluateCards(5, 13, buf[5..10].*);
-                errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(buf[0..5]), Card.Cards.fromIds(buf[5..10]), a1, a2, e1, e2 });
-                try testing.expectEqual(a1 < a2, e1.value > e2.value);
+    var buf: [14]u8 = undefined;
+    switch (ncards) {
+        inline 5, 7 => |N| switch (deck) {
+            inline .short, .full => |R| {
+                const h1 = buf[0..N];
+                const h2 = buf[N .. N * 2];
+                CombinationIterator(@backingInt(R) * 4, N * 2).randomHand(smith, buf[0 .. N * 2]);
+                const a1 = ev.evaluateNCards(N, R, h1.*);
+                const a2 = ev.evaluateNCards(N, R, h2.*);
+                const e1, const e2 = if (R == .short)
+                    .{ phe.evaluateCardsShortdeck(h1), phe.evaluateCardsShortdeck(h2) }
+                else
+                    .{ phe.evaluateCards(N, @backingInt(R), h1.*), phe.evaluateCards(N, @backingInt(R), h2.*) };
+                errdefer std.debug.print("N R: {} {t}\nh1: {f} {f}\nh2: {f} {f}\ne1 e2: {} {}\na1 a2: {f} {f}\n", .{
+                    N,
+                    R,
+                    Cards.fromIds(R, h1).fmtColor(),
+                    Cards.fromIds(R, h1),
+                    Cards.fromIds(R, h2).fmtColor(),
+                    Cards.fromIds(R, h2),
+                    e1.value,
+                    e2.value,
+                    a1,
+                    a2,
+                });
+                if ((a1.category == .straight_flush_shortdeck and a1.hi == 1) or
+                    (a2.category == .straight_flush_shortdeck and a2.hi == 1))
+                {
+                    // known oracle incorrect rank for wheel
+                    try testing.expectEqual(e1.value < e2.value, a1.int() < a2.int());
+                } else {
+                    try testing.expectEqual(e1.value > e2.value, a1.int() < a2.int());
+                }
             },
-            else => unreachable,
-        },
-        7 => switch (R) {
-            9 => unreachable,
-            13 => {
-                var buf: [14]u8 = undefined;
-                CombinationIterator(52, 14).randomHand(smith, &buf);
-                const a1 = ev.evaluateNCards(7, 13, buf[0..7].*);
-                const a2 = ev.evaluateNCards(7, 13, buf[7..14].*);
-                const e1 = phe.evaluateCards(7, 13, buf[0..7].*);
-                const e2 = phe.evaluateCards(7, 13, buf[7..14].*);
-                errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(buf[0..7]), Card.Cards.fromIds(buf[7..14]), a1, a2, e1, e2 });
-                try testing.expectEqual(a1 < a2, e1.value > e2.value);
-            },
-            else => unreachable,
         },
         else => unreachable,
     }
@@ -78,66 +81,67 @@ const TestCtx = struct {
     }
 };
 
-// compare against c version
+// compare against phe_c
 test "validate 5" {
-    if (true) return error.SkipZigTest;
-    const cb = struct {
-        fn func(ids: [5]u8, ctx: *[5]u8) !bool {
-            const a1 = ev.evaluateNCards(5, 13, ids);
-            const a2 = ev.evaluateNCards(5, 13, ctx.*);
-            const e1 = phe_c.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
-            const e2 = phe_c.evaluate_5cards(ctx[0], ctx[1], ctx[2], ctx[3], ctx[4]);
-            errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(&ids), Card.Cards.fromIds(ctx), a1, a2, e1, e2 });
-            try testing.expectEqual(a1 > a2, e1 < e2);
-            ctx.* = ids;
-            return true;
-        }
-    }.func;
-    var prev: [5]u8 = std.simd.iota(u8, 5);
-    try util.comb5Cb(0, 52, cb, &prev);
-
+    if (options.run_slow_tests) {
+        const cb = struct {
+            fn func(ids: [5]u8, ctx: *[5]u8) !bool {
+                const a1 = ev.evaluateNCards(5, .full, ids);
+                const a2 = ev.evaluateNCards(5, .full, ctx.*);
+                const e1 = phe.evaluate5Cards(ids);
+                const e2 = phe.evaluate5cards(ctx);
+                errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Cards.fromIds(.full, &ids), Cards.fromIds(.full, ctx), a1, a2, e1.value, e2.value });
+                try testing.expectEqual(a1 > a2, e1 < e2);
+                ctx.* = ids;
+                return true;
+            }
+        }.func;
+        var prev: [5]u8 = std.simd.iota(u8, 5);
+        try util.comb5Cb(0, 52, cb, &prev);
+    }
     var prng = std.Random.DefaultPrng.init(@intCast(Io.Timestamp.now(testing.io, .cpu_process).nanoseconds));
     const random = prng.random();
-    var ids: [52]u8 = std.simd.iota(u8, 52);
-    for (0..1_000_000) |_| {
-        random.shuffle(u8, &ids);
-        const a1 = ev.evaluateNCards(5, 13, ids[0..5].*);
-        const a2 = ev.evaluateNCards(5, 13, ids[5..10].*);
-        const e1 = phe_c.evaluate_5cards(ids[0], ids[1], ids[2], ids[3], ids[4]);
-        const e2 = phe_c.evaluate_5cards(ids[5], ids[6], ids[7], ids[8], ids[9]);
-        errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..5]), Card.Cards.fromIds(ids[5..10]), a1, a2, e1, e2 });
-        try testing.expectEqual(e1 < e2, a1 > a2);
+    var ids: [10]u8 = undefined;
+    for (0..10_000) |_| {
+        CombinationIterator(52, 10).randomHand(random, &ids);
+        const a1 = ev.evaluateNCards(5, .full, ids[0..5].*);
+        const a2 = ev.evaluateNCards(5, .full, ids[5..10].*);
+        const e1 = phe.evaluate5Cards(13, ids[0..5].*);
+        const e2 = phe.evaluate5Cards(13, ids[5..10].*);
+        errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Cards.fromIds(.full, ids[0..5]), Cards.fromIds(.full, ids[5..10]), a1, a2, e1.value, e2.value });
+        try testing.expectEqual(e1.value < e2.value, a1.int() > a2.int());
     }
 }
 
 test "validate 7" {
-    if (true) return error.SkipZigTest;
-    const cb = struct {
-        fn func(ids: [7]u8, ctx: *[7]u8) !bool {
-            const a1 = ev.evaluateNCards(7, 13, ids);
-            const a2 = ev.evaluateNCards(7, 13, ctx.*);
-            const e1 = phe_c.evaluate_7cards(ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]);
-            const e2 = phe_c.evaluate_7cards(ctx[0], ctx[1], ctx[2], ctx[3], ctx[4], ctx[5], ctx[6]);
-            errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..7]), Card.Cards.fromIds(ctx[0..7]), a1, a2, e1, e2 });
-            try testing.expectEqual(e1 < e2, a1 > a2);
-            ctx.* = ids;
-            return true;
-        }
-    }.func;
-    var prev: [7]u8 = std.simd.iota(u8, 7);
-    try util.comb7Cb(0, 52, cb, &prev);
+    if (options.run_slow_tests) {
+        const cb = struct {
+            fn func(ids: [7]u8, ctx: *[7]u8) !bool {
+                const a1 = ev.evaluateNCards(7, .full, ids);
+                const a2 = ev.evaluateNCards(7, .full, ctx.*);
+                const e1 = phe.evaluate7Cards(13, ids[0..7].*);
+                const e2 = phe.evaluate7Cards(13, ctx[0..7].*);
+                errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Cards.fromIds(.full, ids[0..7]), Cards.fromIds(.full, ctx[0..7]), a1, a2, e1.value, e2.value });
+                try testing.expectEqual(e1 < e2, a1.int() > a2.int());
+                ctx.* = ids;
+                return true;
+            }
+        }.func;
+        var prev: [7]u8 = std.simd.iota(u8, 7);
+        try util.comb7Cb(0, 52, cb, &prev);
+    }
 
     var prng = std.Random.DefaultPrng.init(@intCast(Io.Timestamp.now(testing.io, .cpu_process).nanoseconds));
     const random = prng.random();
-    var ids: [52]u8 = std.simd.iota(u8, 52);
-    for (0..1_000_000) |_| {
-        random.shuffle(u8, &ids);
-        const a1 = ev.evaluateNCards(7, 13, ids[0..7].*);
-        const a2 = ev.evaluateNCards(7, 13, ids[7..14].*);
-        const e1 = phe_c.evaluate_7cards(ids[0], ids[1], ids[2], ids[3], ids[4], ids[5], ids[6]);
-        const e2 = phe_c.evaluate_7cards(ids[7], ids[8], ids[9], ids[10], ids[11], ids[12], ids[13]);
-        errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Card.Cards.fromIds(ids[0..7]), Card.Cards.fromIds(ids[7..14]), a1, a2, e1, e2 });
-        try testing.expectEqual(e1 < e2, a1 > a2);
+    var ids: [14]u8 = undefined;
+    for (0..10_000) |_| {
+        CombinationIterator(52, 14).randomHand(random, &ids);
+        const a1 = ev.evaluateNCards(7, .full, ids[0..7].*);
+        const a2 = ev.evaluateNCards(7, .full, ids[7..14].*);
+        const e1 = phe.evaluate7Cards(13, ids[0..7].*);
+        const e2 = phe.evaluate7Cards(13, ids[7..14].*);
+        errdefer std.debug.print("{f}\n{f}\n{} {} {} {}\n", .{ Cards.fromIds(.full, ids[0..7]), Cards.fromIds(.full, ids[7..14]), a1, a2, e1.value, e2.value });
+        try testing.expectEqual(e1.value < e2.value, a1.int() > a2.int());
     }
 }
 
@@ -161,20 +165,7 @@ fn randomCardSample(comptime len: u8, map: *std.AutoHashMap(u8, void), rand: std
 fn evaluateOmahaCardsC(N: comptime_int, R: comptime_int, cs: [9]u8) u32 {
     _ = N;
     _ = R;
-    const c = cs[0..5];
-    const h = cs[5..];
-    return @intCast(phe_c.evaluate_omaha_cards(
-        @as(c_int, @intCast(c[0])),
-        @as(c_int, @intCast(c[1])),
-        @as(c_int, @intCast(c[2])),
-        @as(c_int, @intCast(c[3])),
-        @as(c_int, @intCast(c[4])),
-        @as(c_int, @intCast(h[0])),
-        @as(c_int, @intCast(h[1])),
-        @as(c_int, @intCast(h[2])),
-        @as(c_int, @intCast(h[3])),
-        @as(c_int, @intCast(h[4])),
-    ));
+    return phe.evaluateOmahaCards(cs);
 }
 
 test "holdem" {
@@ -213,74 +204,80 @@ test "holdem" {
     const hh3 = "AdJc";
     const hh4 = "AsTc";
 
-    // simple 5 card hands
-    try checkRankOrder(hi_seven, hi_ace, "", .lt);
-    try checkRankOrder(hi_ace, pr, "", .lt);
-    try checkRankOrder(pr, pr2, "", .lt);
-    try checkRankOrder(pr2, pr3, "", .lt);
-    try checkRankOrder(pr3, pr4, "", .lt);
-    try checkRankOrder(pr4, pr5, "", .lt);
-    try checkRankOrder(pr5, pr6, "", .lt);
-    try checkRankOrder(pr6, pr7, "", .lt);
-    try checkRankOrder(pr6, two_pr1, "", .lt);
-    try checkRankOrder(two_pr1, two_pr2, "", .lt);
-    try checkRankOrder(two_pr2, two_pr3, "", .lt);
-    try checkRankOrder(two_pr3, three_kind1, "", .lt);
-    try checkRankOrder(three_kind1, three_kind2, "", .lt);
-    try checkRankOrder(three_kind2, three_kind3, "", .lt);
-    try checkRankOrder(three_kind3, straight_wheel, "", .lt);
-    try checkRankOrder(straight_wheel, straight, "", .lt);
-    try checkRankOrder(straight, straight_broadway, "", .lt);
-    try checkRankOrder(straight_broadway, flush0, "", .lt);
-    try checkRankOrder(flush0, flush_k_hi, "", .lt);
-    try checkRankOrder(flush_k_hi, flush_a_hi, "", .lt);
-    try checkRankOrder(flush_a_hi, full_house1, "", .lt);
-    try checkRankOrder(full_house1, full_house2, "", .lt);
-    try checkRankOrder(full_house2, four_kind1, "", .lt);
-    try checkRankOrder(four_kind1, four_kind2, "", .lt);
-    try checkRankOrder(four_kind2, four_kind3, "", .lt);
-    try checkRankOrder(four_kind3, strt_flush_wheel, "", .lt);
-    try checkRankOrder(strt_flush_wheel, strt_flush1, "", .lt);
-    try checkRankOrder(strt_flush1, strt_flush_royal, "", .lt);
-    try checkRankOrder(strt_flush1, strt_flush_royal, "", .lt);
+    try checkRankOrder(.full, hi_seven, hi_ace, "", .lt);
+    try checkRankOrder(.full, hi_ace, pr, "", .lt);
+    try checkRankOrder(.full, pr, pr2, "", .lt);
+    try checkRankOrder(.full, pr2, pr3, "", .lt);
+    try checkRankOrder(.full, pr3, pr4, "", .lt);
+    try checkRankOrder(.full, pr4, pr5, "", .lt);
+    try checkRankOrder(.full, pr5, pr6, "", .lt);
+    try checkRankOrder(.full, pr6, pr7, "", .lt);
+    try checkRankOrder(.full, pr6, two_pr1, "", .lt);
+    try checkRankOrder(.full, two_pr1, two_pr2, "", .lt);
+    try checkRankOrder(.full, two_pr2, two_pr3, "", .lt);
+    try checkRankOrder(.full, two_pr3, three_kind1, "", .lt);
+    try checkRankOrder(.full, three_kind1, three_kind2, "", .lt);
+    try checkRankOrder(.full, three_kind2, three_kind3, "", .lt);
+    try checkRankOrder(.full, three_kind3, straight_wheel, "", .lt);
+    try checkRankOrder(.full, straight_wheel, straight, "", .lt);
+    try checkRankOrder(.full, straight, straight_broadway, "", .lt);
+    try checkRankOrder(.full, straight_broadway, flush0, "", .lt);
+    try checkRankOrder(.full, flush0, flush_k_hi, "", .lt);
+    try checkRankOrder(.full, flush_k_hi, flush_a_hi, "", .lt);
+    try checkRankOrder(.full, flush_a_hi, full_house1, "", .lt);
+    try checkRankOrder(.full, full_house1, full_house2, "", .lt);
+    try checkRankOrder(.full, full_house2, four_kind1, "", .lt);
+    try checkRankOrder(.full, four_kind1, four_kind2, "", .lt);
+    try checkRankOrder(.full, four_kind2, four_kind3, "", .lt);
+    try checkRankOrder(.full, four_kind3, strt_flush_wheel, "", .lt);
+    try checkRankOrder(.full, strt_flush_wheel, strt_flush1, "", .lt);
+    try checkRankOrder(.full, strt_flush1, strt_flush_royal, "", .lt);
+    try checkRankOrder(.full, strt_flush1, strt_flush_royal, "", .lt);
 
-    try checkRankOrder(hh2, hh1, ajq23_b, .lt);
-    try checkRankOrder(hh3, hh2, ajq23_b, .lt);
-    try checkRankOrder(hh4, hh3, ajq23_b, .lt);
+    try checkRankOrder(.full, hh2, hh1, ajq23_b, .lt);
+    try checkRankOrder(.full, hh3, hh2, ajq23_b, .lt);
+    try checkRankOrder(.full, hh4, hh3, ajq23_b, .lt);
 
     // misc validation failures
-    try checkRankOrder("5c6c7c8d8s", "5c6c7c8d9c", "", .lt);
-    try checkRankOrder("2c2d3c4c5c6c8c", "2c2d3c4c5c6c7s", "", .eq);
-    try checkRankOrder("2c2d3d4d5d6d7c", "2c2d3d4d5d6d6s", "", .eq);
-    try checkRankOrder("2c2d3c4c5c6cAc", "2c2d3c4c5c6cKs", "", .eq);
-    try checkRankOrder("2c2d3c4c5d6dAc", "2c2d3c4c5d6dKs", "", .eq);
-    try checkRankOrder("2c3c4c5c6c7cAd", "2c3c4c5c6c7cAc", "", .eq);
-    try checkRankOrder("2c3c4c5c6c7d8c", "2c3c4c5c6c7d7s", "", .eq);
-    try checkRankOrder("2c9cTcJcQcKcKs", "2c9cTcJcQcKcAc", "", .lt);
-    try checkRankOrder("2c2s3s4s5s6dAs", "2c2s3s4s5s6h6s", "", .lt);
-    try checkRankOrder("Jd5sKd8dAcQs6c", "AhJcKcQh3d8c7h", "", .eq);
-    try checkRankOrder("Qh7cJsAd7sKc2d", "7dQd7hKhAhTd3c", "", .eq);
-    try checkRankOrder("2c2d2h2s3c3d3s", "2c2d2h2s3c3d4c", "", .lt);
-    try checkRankOrder("2c2d3c3d4c4d5s", "2c2d3c3d4c4d6c", "", .lt);
-    try checkRankOrder("QhQdKd5d7h5hKs", "6hKhQsJsKc2cQc", "", .lt);
-    try checkRankOrder("Js4s2s7s3s6hKs", "As4dKd7d3d7hJd", "", .eq);
-    try checkRankOrder("2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
-    try checkRankOrder("2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
-    try checkRankOrder("5dAcAd9dKd7d8d", "9sAsKs2s7s4s8s", "", .eq);
-    try checkRankOrder("Kd8d7d5d6d", "As8s7s4s5s", "", .lt);
+    try checkRankOrder(.full, "5c6c7c8d8s", "5c6c7c8d9c", "", .lt);
+    try checkRankOrder(.full, "2c2d3c4c5c6c8c", "2c2d3c4c5c6c7s", "", .eq);
+    try checkRankOrder(.full, "2c2d3d4d5d6d7c", "2c2d3d4d5d6d6s", "", .eq);
+    try checkRankOrder(.full, "2c2d3c4c5c6cAc", "2c2d3c4c5c6cKs", "", .eq);
+    try checkRankOrder(.full, "2c2d3c4c5d6dAc", "2c2d3c4c5d6dKs", "", .eq);
+    try checkRankOrder(.full, "2c3c4c5c6c7cAd", "2c3c4c5c6c7cAc", "", .eq);
+    try checkRankOrder(.full, "2c3c4c5c6c7d8c", "2c3c4c5c6c7d7s", "", .eq);
+    try checkRankOrder(.full, "2c9cTcJcQcKcKs", "2c9cTcJcQcKcAc", "", .lt);
+    try checkRankOrder(.full, "2c2s3s4s5s6dAs", "2c2s3s4s5s6h6s", "", .lt);
+    try checkRankOrder(.full, "Jd5sKd8dAcQs6c", "AhJcKcQh3d8c7h", "", .eq);
+    try checkRankOrder(.full, "Qh7cJsAd7sKc2d", "7dQd7hKhAhTd3c", "", .eq);
+    try checkRankOrder(.full, "2c2d2h2s3c3d3s", "2c2d2h2s3c3d4c", "", .lt);
+    try checkRankOrder(.full, "2c2d3c3d4c4d5s", "2c2d3c3d4c4d6c", "", .lt);
+    try checkRankOrder(.full, "QhQdKd5d7h5hKs", "6hKhQsJsKc2cQc", "", .lt);
+    try checkRankOrder(.full, "Js4s2s7s3s6hKs", "As4dKd7d3d7hJd", "", .eq);
+    try checkRankOrder(.full, "2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
+    try checkRankOrder(.full, "2c2d2h3c5d", "2c2d2h4c5c", "", .lt);
+    try checkRankOrder(.full, "5dAcAd9dKd7d8d", "9sAsKs2s7s4s8s", "", .eq);
+    try checkRankOrder(.full, "Kd8d7d5d6d", "As8s7s4s5s", "", .lt);
 }
 
-fn checkRankOrder(comptime l: []const u8, comptime r: []const u8, comptime b: []const u8, order: std.math.Order) !void {
+fn checkRankOrder(comptime R: ev.Deck, comptime l: []const u8, comptime r: []const u8, comptime b: []const u8, order: std.math.Order) !void {
     const lf = b ++ l;
     const rf = b ++ r;
-    assert(lf.len == rf.len);
-    const lr = ev.evaluateNHand(lf.len / 2, 13, lf);
-    const rr = ev.evaluateNHand(rf.len / 2, 13, rf);
-    errdefer std.debug.print(
-        "low:  {s} {f}\nhigh: {s} {f}\n",
-        .{ lf, Rank.fromInt(lr), rf, Rank.fromInt(rr) },
-    );
-    try testing.expectEqual(order, std.math.order(lr, rr));
+    comptime assert(lf.len == rf.len);
+    const N = lf.len / 2;
+    const lr = ev.evaluateNHand(N, R, lf);
+    const rr = ev.evaluateNHand(N, R, rf);
+    errdefer {
+        var lids: [N]u8 = undefined;
+        var rids: [N]u8 = undefined;
+        Cards.idsFromNames(R, lf, &lids);
+        Cards.idsFromNames(R, rf, &rids);
+        std.debug.print(
+            "low:  {f} {f}\nhigh: {f} {f}\n",
+            .{ Cards.fromIds(R, &lids).fmtColor(), lr, Cards.fromIds(R, &rids).fmtColor(), rr },
+        );
+    }
+    try testing.expectEqual(order, std.math.order(lr.int(), rr.int()));
 }
 
 test "omaha ranks" {
@@ -330,7 +327,12 @@ test "omaha ranks" {
     // try isRankClassOh(.two_pair, oh8, lo_b);
 }
 
-fn islessRkOmaha(comptime l: []const u8, comptime h: []const u8, comptime board: []const u8, comptime hilo: enum { hi, lo }) !void {
+fn islessRkOmaha(
+    comptime l: []const u8,
+    comptime h: []const u8,
+    comptime board: []const u8,
+    comptime hilo: enum { hi, lo },
+) !void {
     const lr = ev.evaluateOmahaHand(board ++ l);
     const hr = ev.evaluateOmahaHand(board ++ h);
     if (hilo == .hi and lr.value < hr.value) {
@@ -357,7 +359,7 @@ fn isRankClassOh(c: Rank.Category, comptime h: []const u8, comptime board: []con
         const cd = c.describe();
         const rcd = rc.describe();
         const cards = Card.cardsFromString(9, board ++ h);
-        const r2 = phe_c.evaluate_omaha_cards(@as(c_int, @intCast(cards[0].id)), @as(c_int, @intCast(cards[1].id)), @as(c_int, @intCast(cards[2].id)), @as(c_int, @intCast(cards[3].id)), @as(c_int, @intCast(cards[4].id)), @as(c_int, @intCast(cards[5].id)), @as(c_int, @intCast(cards[6].id)), @as(c_int, @intCast(cards[7].id)), @as(c_int, @intCast(cards[8].id)));
+        const r2 = phe.evaluateOmahaCards(@as(c_int, @intCast(cards[0].id)), @as(c_int, @intCast(cards[1].id)), @as(c_int, @intCast(cards[2].id)), @as(c_int, @intCast(cards[3].id)), @as(c_int, @intCast(cards[4].id)), @as(c_int, @intCast(cards[5].id)), @as(c_int, @intCast(cards[6].id)), @as(c_int, @intCast(cards[7].id)), @as(c_int, @intCast(cards[8].id)));
         const rc2 = Rank{ .value = @as(u16, @intCast(r2)) };
         std.debug.print(
             "expected {s} but got {s} hand {s} board {s}. c rank class: {}",
@@ -367,98 +369,29 @@ fn isRankClassOh(c: Rank.Category, comptime h: []const u8, comptime board: []con
     }
 }
 
-fn makeFlush(comptime ranks: []const u8) [ranks.len * 2]u8 {
+inline fn makeFlush(comptime ranks: []const u8) [ranks.len * 2]u8 {
     var res: [ranks.len * 2]u8 = @splat('s');
     for (ranks, 0..) |rk, i| res[i * 2] = rk;
     return res;
 }
 
-fn makeNonFlush(comptime ranks: []const u8) [ranks.len * 2]u8 {
-    var res: [ranks.len * 2]u8 = undefined;
-    for (ranks, 0..) |rk, i|
-        @memcpy(res[i * 2 .. i * 2 + 2], &[2]u8{ rk, Card.suitToName(@as(u2, @intCast(i % 4))) });
+inline fn makeNonFlush(comptime ranks: []const u8) [ranks.len * 2]u8 {
+    var res: [ranks.len * 2]u8 = @splat('s');
+    for (ranks, 0..) |rk, i| {
+        if (i & 1 == 1) res[i * 2 + 1] = 'h';
+        res[i * 2] = rk;
+    }
     return res;
 }
 
 test "shortdeck" {
-    if (true) return error.SkipZigTest;
-    const HCB = struct { c: Rank.Category, lo: [10]u8, hi: [10]u8, lo7: *const [14]u8, hi7: *const [14]u8 };
-    const handClassBoundaries = [_]HCB{
-        .{ .c = .straight_flush, .lo = makeFlush("A6789"), .hi = makeFlush("TJQKA"), .lo7 = "Ad6d7d8d9dJsQs", .hi7 = "ThJhQhKhAhJsQs" },
-        .{ .c = .four_kind, .lo = makeNonFlush("66667"), .hi = makeNonFlush("AAAAK"), .lo7 = "6h6s6d6c7h7d7s", .hi7 = "AhAsAdAcKh7d7s" },
-        .{ .c = .flush, .lo = makeFlush("6789J"), .hi = makeFlush("9JQKA"), .lo7 = "6s7s8s9sJsQdKd", .hi7 = "9hJhQhKhAhQdKd" },
-        .{ .c = .full_house, .lo = makeNonFlush("66677"), .hi = makeNonFlush("AAAKK"), .lo7 = "6h6s6d7c7hQdJc", .hi7 = "AhAsAdKcKhQdJc" },
-        .{ .c = .straight, .lo = makeNonFlush("6789T"), .hi = makeNonFlush("TJQKA"), .lo7 = "Ad6s7d8s9s9h9c", .hi7 = "ThJdQhKhAhAdAc" },
-        .{ .c = .three_kind, .lo = makeNonFlush("66678"), .hi = makeNonFlush("AAAKQ"), .lo7 = "6h6s6d8c7hThJc", .hi7 = "AhAsAdQcKhTh9c" },
-        .{ .c = .two_pair, .lo = makeNonFlush("66778"), .hi = makeNonFlush("AAKKQ"), .lo7 = "6h6s7d7h8cJdQc", .hi7 = "AhAsKdKhQdJd9c" },
-        .{ .c = .one_pair, .lo = makeNonFlush("66789"), .hi = makeNonFlush("AAKQJ"), .lo7 = "6h6s7d8c9dKcJd", .hi7 = "AhAsKdQdJh9c8s" },
-        .{ .c = .high_card, .lo = makeNonFlush("6789J"), .hi = makeNonFlush("9JQKA"), .lo7 = "6s7s8s9sJdQhKd", .hi7 = "7c8s9hJhQhKhAd" },
-    };
-    // for each category, compare against previous
-    // check that rank < rank_prev
-    var i: usize = 0;
-    while (i < handClassBoundaries.len) : (i += 1) {
-        const hcb = handClassBoundaries[i];
-        var hand_prev_lo: []const u8 = "?????";
-        var hand_prev_hi: []const u8 = "?????";
-        var rank_prev_lo = Rank.init(0);
-        var rank_prev_hi = Rank.init(0);
-        var hand_prev_lo7: []const u8 = "???????";
-        var hand_prev_hi7: []const u8 = "???????";
-        var rank_prev_lo7 = Rank.init(0);
-        var rank_prev_hi7 = Rank.init(0);
-
-        if (i > 0) {
-            hand_prev_lo = &handClassBoundaries[i - 1].lo;
-            hand_prev_hi = &handClassBoundaries[i - 1].hi;
-            rank_prev_lo = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(5, hand_prev_lo));
-            rank_prev_hi = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(5, hand_prev_hi));
-            hand_prev_lo7 = handClassBoundaries[i - 1].lo7;
-            hand_prev_hi7 = handClassBoundaries[i - 1].hi7;
-            rank_prev_lo7 = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(7, hand_prev_lo7));
-            rank_prev_hi7 = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(7, hand_prev_hi7));
-        }
-
-        const r1 = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(5, &hcb.lo));
-        const r2 = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(5, &hcb.hi));
-        const r3 = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(7, hcb.lo7));
-        const r4 = ev.evaluateCardsShortdeck(&Card.cardsFromStringSd(7, hcb.hi7));
-        const category = hcb.c;
-        const cmpClass = struct {
-            fn _(c: Rank.Category, r: Rank, hand: []const u8, rprev_lo: Rank, hprev_lo: []const u8, rprev_hi: Rank, hprev_hi: []const u8) !void {
-                const category_sd = r.categoryToSd();
-                if (c != category_sd) {
-                    std.debug.print(
-                        "category mismatch expected {s} got {s} hand {s} rank {} range {}-{} \n",
-                        .{ c.describe(), category_sd.describe(), hand, r.value, c.begin(), c.end() },
-                    );
-                    try testing.expect(c == category_sd);
-                }
-                if (!(c.beginSdAdjusted() < r.value and r.value <= c.endSdAdjusted())) {
-                    std.debug.print(
-                        "hand rank outside category range. category {s} hand {s} rank {} range {}-{}\n",
-                        .{ r.category().describe(), hand, r.value, c.beginSdAdjusted(), c.endSdAdjusted() },
-                    );
-                    try testing.expect(c.beginSdAdjusted() < r.value and r.value <= c.endSdAdjusted());
-                }
-                if (r.value <= rprev_lo.value) {
-                    std.debug.print("{s} rank {} {s} <= {} {s} {s}\n", .{ r.category().describe(), r.value, hand, rprev_lo.value, hprev_lo, rprev_lo.category().describe() });
-                    try testing.expect(r.value > rprev_lo.value);
-                }
-                if (r.value <= rprev_hi.value) {
-                    std.debug.print(
-                        "{s} rank {} {s} <= {} {s} {s}\n",
-                        .{ r.category().describe(), r.value, hand, rprev_hi.value, hprev_hi, rprev_hi.category().describe() },
-                    );
-                    try testing.expect(r.value > rprev_hi.value);
-                }
-            }
-        }._;
-        try cmpClass(category, r1, &hcb.lo, rank_prev_lo, hand_prev_lo, rank_prev_hi, hand_prev_hi);
-        try cmpClass(category, r2, &hcb.hi, rank_prev_lo, hand_prev_lo, rank_prev_hi, hand_prev_hi);
-        try cmpClass(category, r3, hcb.lo7, rank_prev_lo7, hand_prev_lo7, rank_prev_hi7, hand_prev_hi7);
-        try cmpClass(category, r4, hcb.hi7, rank_prev_lo7, hand_prev_lo7, rank_prev_hi7, hand_prev_hi7);
-    }
+    try testing.expectEqual(.high_card_shortdeck, ev.evaluateNHand(5, .short, &makeNonFlush("6789J")).category);
+    try checkRankOrder(.short, &makeNonFlush("66677"), &makeFlush("6789J"), "", .lt);
+    try checkRankOrder(.short, "Ks9hQdJd9sAc8c", "9cAd8h9d7d6hJc", "", .lt);
+    try checkRankOrder(.short, "Qs9hKdJd9sAc8c", "9cAd8h9d7d6hJc", "", .lt);
+    try checkRankOrder(.short, "Jd8d6dKsAd9dKd", "6s7s8sAsJs9s9c", "", .lt);
+    try checkRankOrder(.short, "6d8dQdKsAd9dKd", "6s7s8sAsJs9s9c", "", .lt);
+    try checkRankOrder(.short, "6dTdAdQd8d9d7d", "7s6s8sAsKs9s8c", "", .lt);
 }
 
 fn printDebugInfo(comptime ev_name: []const u8, len: usize, h: []Card, h2: []Card, rank: Rank, rank2: Rank, rank_sd: Rank, rank_sd2: Rank, cat: Rank.Category, cat2: Rank.Category, sdcat: Rank.Category, sd2cat: Rank.Category, bin: u16, bin2: u16) void {
@@ -585,7 +518,7 @@ test "razz ev5" {
             const r = ev.evaluateCardsRazz(&Card.cardsFromString(5, &makeFn(h)));
             const r_prev = ev.evaluateCardsRazz(&Card.cardsFromString(5, &makeFn(hands[i - 1])));
             const expected = r_prev.value < r.value;
-            // print("h {}-{} h_prev {}-{}\n", .{ h, r.value, hands[i - 1], r_prev.value });
+            // print("h {}-{} h_prev {}-{}\n", .{ h, r.value, hands[i - 1], r_prevhcb.value });
             if (!expected) try testing.expect(expected);
         }
     }
@@ -711,11 +644,13 @@ fn evaluate5CardsRazzVecWrap(a: Card, b: Card, c: Card, d: Card, e: Card, _: usi
 const std = @import("std");
 const Io = std.Io;
 const mem = std.mem;
+const math = std.math;
 const ev = @import("evaluator");
 const Card = ev.Card;
+const Cards = ev.Cards;
 const Rank = ev.Rank;
 const util = ev.util;
-const phe_c = @import("phe_c.zig");
 const assert = std.debug.assert;
 const phe = @import("phe");
 const CombinationIterator = @import("combinations.zig").CombinationIterator;
+const options = @import("build-options");

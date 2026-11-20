@@ -19,15 +19,22 @@ runBench() {
 
 runBench2() {
     echo "5-phe-c-$RELEASE"
-    zig build bench -Dverbose -DbenchN=5 --release=$RELEASE -Dstrip=$STRIP -Dbench-target=phe_c
+    time zig-out/bin/bench-c-5-$RELEASE
+    # zig build bench -Dverbose -DbenchN=5 --release=$RELEASE -Dstrip=$STRIP -Dbench-target=phe_c
+
     # echo "5-phe-z-$RELEASE"
     # zig build bench -Dverbose -DbenchN=5 -Dbench-target=phe_z --release=$RELEASE -Dstrip=$STRIP
+
     echo "5-$RELEASE"
     zig build bench -Dverbose -DbenchN=5 --release=$RELEASE -Dstrip=$STRIP
+
     echo "7-phe-c-$RELEASE"
-    zig build bench -Dverbose -DbenchN=7 --release=$RELEASE -Dstrip=$STRIP -Dbench-target=phe_c
+    time zig-out/bin/bench-c-7-$RELEASE
+    # zig build bench -Dverbose -DbenchN=7 --release=$RELEASE -Dstrip=$STRIP -Dbench-target=phe_c
+
     # echo "7-phe-z-$RELEASE"
     # zig build bench -Dverbose -DbenchN=7 -Dbench-target=phe_z --release=$RELEASE -Dstrip=$STRIP
+
     echo "7-$RELEASE"
     zig build bench -Dverbose -DbenchN=7 --release=$RELEASE -Dstrip=$STRIP
 }
